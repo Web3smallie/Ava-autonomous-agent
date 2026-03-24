@@ -57,6 +57,46 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
   }
+}
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&display=swap');
+
+.font-display {
+  font-family: 'Orbitron', sans-serif;
+}
+
+.glow-green {
+  box-shadow: 0 0 20px hsl(142 70% 45% / 0.15), 0 0 60px hsl(142 70% 45% / 0.05);
+}
+
+.glow-text {
+  text-shadow: 0 0 20px hsl(142 70% 45% / 0.5);
+}
+
+.pulse-dot {
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+@keyframes pulse-green {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.grid-bg {
+  background-image: 
+    linear-gradient(hsl(220 15% 15% / 0.5) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(220 15% 15% / 0.5) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.scan-line {
+  animation: scan 3s linear infinite;
+}
+
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
 }
