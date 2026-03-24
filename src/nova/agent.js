@@ -3,7 +3,7 @@ const axios = require("axios");
 require("dotenv").config();
 
 const USDT_ADDRESS = "0x1E4a5963aBFD975d8c9021ce480b42188849D41d";
-const AVA_API = "http://localhost:3000";
+const AVA_API = "https://ava-autonomous-agent-production.up.railway.app";
 const AVA_WALLET = "0x00EdD1bE53767fD3e59F931B509176c7F50eC14d";
 const PAYMENT_AMOUNT = "0.001";
 
