@@ -1,4 +1,4 @@
-import { useAvaInfo, useAvaStatus } from "@/hooks/useAvaData";
+import { useAvaStatus } from "@/hooks/useAvaData";
 import Navbar from "@/components/Navbar";
 import StatusCard from "@/components/StatusCard";
 import WalletCard from "@/components/WalletCard";
@@ -8,9 +8,7 @@ import EndpointsCard from "@/components/EndpointsCard";
 import TradeInfoCard from "@/components/TradeInfoCard";
 
 const Dashboard = () => {
-  const { data: info, isLoading: infoLoading } = useAvaInfo();
-  const { data: status, isLoading: statusLoading } = useAvaStatus();
-  const isLoading = infoLoading && statusLoading;
+  const { data, isLoading } = useAvaStatus();
 
   return (
     <div className="min-h-screen bg-background grid-bg relative">
@@ -23,10 +21,10 @@ const Dashboard = () => {
       <main className="container mx-auto px-6 py-8">
         <div className="mb-10">
           <h1 className="font-display text-3xl sm:text-4xl font-bold text-foreground glow-text mb-2">
-            {info?.name || "AVA Dashboard"}
+            {data?.name || "AVA Dashboard"}
           </h1>
           <p className="text-muted-foreground text-sm max-w-xl">
-            {info?.description || "The first autonomous trading agent on X Layer"}
+            {data?.description || "The first autonomous trading agent on X Layer"}
           </p>
         </div>
 
@@ -38,13 +36,13 @@ const Dashboard = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <StatusCard status={status?.status} />
-            <WalletCard wallet={info?.wallet} balance={status?.balance?.usdt} />
-            <TradingDecisionCard decision={status?.lastDecision} />
-            <PriceCard ethPrice={status?.ethPrice} />
-            <TradeInfoCard tradeCount={status?.tradeCount} lastTrade={status?.lastTrade} />
+            <StatusCard status={data?.status} />
+            <WalletCard wallet={data?.wallet} balance={data?.balance?.usdt} />
+            <TradingDecisionCard decision={data?.lastDecision} />
+            <PriceCard ethPrice={data?.ethPrice} />
+            <TradeInfoCard tradeCount={data?.tradeCount} lastTrade={data?.lastTrade} />
             <div className="md:col-span-2">
-              <EndpointsCard info={info} />
+              <EndpointsCard info={data} />
             </div>
           </div>
         )}
