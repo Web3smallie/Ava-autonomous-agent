@@ -1,7 +1,7 @@
 import { Copy, Check } from "lucide-react";
 import { useState } from "react";
 
-const WalletCard = ({ wallet, balance }: { wallet?: string; balance?: number }) => {
+const WalletCard = ({ wallet }: { wallet?: string }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -28,12 +28,7 @@ const WalletCard = ({ wallet, balance }: { wallet?: string; balance?: number }) 
           {copied ? <Check size={16} className="text-primary" /> : <Copy size={16} className="text-muted-foreground" />}
         </button>
       </div>
-      {balance !== undefined && (
-        <p className="text-sm font-semibold text-primary mt-3">
-          Balance: ${balance.toFixed(4)} USDT
-        </p>
-      )}
-      <p className="text-xs text-muted-foreground mt-1">Network: X Layer</p>
+      <p className="text-xs text-muted-foreground mt-3">Network: X Layer</p>
     </div>
   );
 };
