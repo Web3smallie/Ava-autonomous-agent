@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 const API_BASE = "https://ava-autonomous-agent-production.up.railway.app";
 
-export interface AvaInfo {
+export interface AvaStatus {
   name: string;
   description: string;
   wallet: string;
@@ -12,33 +12,40 @@ export interface AvaInfo {
     paid: string[];
   };
   pricing: Record<string, string>;
+  balance?: {
+    usdt: number;
+    eth?: number;
+  };
+  lastDecision?: {
+    action: "BUY" | "SELL" | "HOLD";
+    confidence: number;
+    reasoning: string;
+  } | null;
+  tradeCount?: number;
+  lastTrade?: {
+    tx: string;
+    amount?: number;
+    timestamp?: string;
+  };
+  ethPrice?: number;
 }
 
-export interface AvaHealth {
-  status: string;
-  timestamp: string;
-}
+// Keep AvaInfo as alias for backward compat
+export type AvaInfo = AvaStatus;
 
-export function useAvaInfo() {
-  return useQuery<AvaInfo>({
-    queryKey: ["ava-info"],
+export function useAvaStatus() {
+  return useQuery<AvaStatus>({
+    queryKey: ["ava-status"],
     queryFn: async () => {
       const res = await fetch(API_BASE);
-      if (!res.ok) throw new Error("Failed to fetch AVA info");
-      return res.json();
-    },
-    refetchInterval: 30000,
-  });
-}
-
-export function useAvaHealth() {
-  return useQuery<AvaHealth>({
-    queryKey: ["ava-health"],
-    queryFn: async () => {
-      const res = await fetch(`${API_BASE}/health`);
-      if (!res.ok) throw new Error("Failed to fetch AVA health");
+      if (!res.ok) throw new Error("Failed to fetch AVA status");
       return res.json();
     },
     refetchInterval: 10000,
   });
+}
+
+// Keep useAvaInfo pointing to same data
+export function useAvaInfo() {
+  return useAvaStatus();
 }

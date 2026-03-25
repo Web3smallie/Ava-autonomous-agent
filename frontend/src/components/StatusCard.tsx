@@ -1,9 +1,5 @@
-import { useAvaHealth } from "@/hooks/useAvaData";
-
 const StatusCard = ({ status }: { status?: string }) => {
-  const { data: health } = useAvaHealth();
-
-  const isActive = status === "ACTIVE";
+  const isActive = status === "ACTIVE" || status === "TRADING";
 
   return (
     <div className="rounded-xl border border-border bg-card p-6 glow-green animate-fade-in">
@@ -19,13 +15,8 @@ const StatusCard = ({ status }: { status?: string }) => {
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        {health?.status || "Checking status..."}
+        {isActive ? "AVA is actively monitoring the market" : "AVA is currently offline"}
       </p>
-      {health?.timestamp && (
-        <p className="text-xs text-muted-foreground mt-2">
-          Last heartbeat: {new Date(health.timestamp).toLocaleTimeString()}
-        </p>
-      )}
     </div>
   );
 };
