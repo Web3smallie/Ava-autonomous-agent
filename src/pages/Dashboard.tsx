@@ -1,17 +1,19 @@
-import { useAvaInfo } from "@/hooks/useAvaData";
+import { useAvaInfo, useAvaStatus } from "@/hooks/useAvaData";
 import Navbar from "@/components/Navbar";
 import StatusCard from "@/components/StatusCard";
 import WalletCard from "@/components/WalletCard";
 import TradingDecisionCard from "@/components/TradingDecisionCard";
 import PriceCard from "@/components/PriceCard";
 import EndpointsCard from "@/components/EndpointsCard";
+import TradeInfoCard from "@/components/TradeInfoCard";
 
 const Dashboard = () => {
-  const { data: info, isLoading } = useAvaInfo();
+  const { data: info, isLoading: infoLoading } = useAvaInfo();
+  const { data: status, isLoading: statusLoading } = useAvaStatus();
+  const isLoading = infoLoading && statusLoading;
 
   return (
     <div className="min-h-screen bg-background grid-bg relative">
-      {/* Scan line effect */}
       <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden opacity-[0.03]">
         <div className="w-full h-px bg-primary scan-line" />
       </div>
@@ -19,7 +21,6 @@ const Dashboard = () => {
       <Navbar />
 
       <main className="container mx-auto px-6 py-8">
-        {/* Hero */}
         <div className="mb-10">
           <h1 className="font-display text-3xl sm:text-4xl font-bold text-foreground glow-text mb-2">
             {info?.name || "AVA Dashboard"}
@@ -37,10 +38,11 @@ const Dashboard = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <StatusCard status={info?.status} />
-            <WalletCard wallet={info?.wallet} />
-            <TradingDecisionCard />
-            <PriceCard />
+            <StatusCard status={status?.status} />
+            <WalletCard wallet={info?.wallet} balance={status?.balance?.usdt} />
+            <TradingDecisionCard decision={status?.lastDecision} />
+            <PriceCard ethPrice={status?.ethPrice} />
+            <TradeInfoCard tradeCount={status?.tradeCount} lastTrade={status?.lastTrade} />
             <div className="md:col-span-2">
               <EndpointsCard info={info} />
             </div>
