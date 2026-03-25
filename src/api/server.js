@@ -88,14 +88,16 @@ app.get("/api/status", async (req, res) => {
     );
     const balance = await USDT.balanceOf("0x00EdD1bE53767fD3e59F931B509176c7F50eC14d");
     const usdt = parseFloat(ethers.formatUnits(balance, 6)).toFixed(2);
+    
+    const marketData = await getMarketData("ETH-USDT");
+    const decision = await makeDecision(marketData);
+
     res.json({
       status: "ACTIVE",
       wallet: "0x00EdD1bE53767fD3e59F931B509176c7F50eC14d",
       network: "X Layer",
       balance: { usdt },
-      lastDecision: avaState.lastDecision,
-      lastTrade: avaState.lastTrade,
-      tradeCount: avaState.tradeCount,
+      lastDecision: decision,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -103,9 +105,6 @@ app.get("/api/status", async (req, res) => {
       status: "ACTIVE",
       wallet: "0x00EdD1bE53767fD3e59F931B509176c7F50eC14d",
       network: "X Layer",
-      lastDecision: avaState.lastDecision,
-      lastTrade: avaState.lastTrade,
-      tradeCount: avaState.tradeCount,
       timestamp: new Date().toISOString()
     });
   }
