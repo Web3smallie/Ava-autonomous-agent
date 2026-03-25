@@ -6,6 +6,7 @@ import TradingDecisionCard from "@/components/TradingDecisionCard";
 import PriceCard from "@/components/PriceCard";
 import EndpointsCard from "@/components/EndpointsCard";
 import TradeInfoCard from "@/components/TradeInfoCard";
+import BalanceCard from "@/components/BalanceCard";
 
 const Dashboard = () => {
   const { data, isLoading } = useAvaStatus();
@@ -38,6 +39,7 @@ const Dashboard = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <StatusCard status={data?.status} />
             <WalletCard wallet={data?.wallet} balance={data?.balance?.usdt} />
+            <BalanceCard balance={data?.balance?.usdt} />
             <TradingDecisionCard decision={data?.lastDecision} />
             <PriceCard ethPrice={data?.ethPrice} />
             <TradeInfoCard tradeCount={data?.tradeCount} lastTrade={data?.lastTrade} />
