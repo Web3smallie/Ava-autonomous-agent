@@ -11,7 +11,6 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// Live state store
 let avaState = {
   lastDecision: null,
   lastTrade: null,
@@ -145,7 +144,6 @@ app.get("/api/report", requirePayment, async (req, res) => {
       title: "AVA Market Report",
       generated: new Date().toISOString(),
       recommendation: decision,
-      market: { price: marketData.price, change: marketData.change24h, signal: marketData.change24h > 0 ? "BULLISH" : "BEARISH" },
       disclaimer: "AVA signals are autonomous AI decisions. Not financial advice.",
       paymentTx: req.paymentTx
     });
