@@ -11,6 +11,23 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
+// Live state store
+let avaState = {
+  lastDecision: null,
+  lastTrade: null,
+  tradeCount: 0,
+  status: "ACTIVE"
+};
+
+// State updater called by loop.js
+app.updateState = (decision, trade) => {
+  if (decision) avaState.lastDecision = decision;
+  if (trade) {
+    avaState.lastTrade = trade;
+    avaState.tradeCount++;
+  }
+};
+
 // x402 payment middleware
 async function requirePayment(req, res, next) {
   const payment = req.headers["x-payment"];
@@ -39,7 +56,6 @@ async function requirePayment(req, res, next) {
     });
   }
 
-  // Verify payment on X Layer
   try {
     const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
     const paymentData = JSON.parse(Buffer.from(payment, "base64").toString());
@@ -64,17 +80,15 @@ async function requirePayment(req, res, next) {
   }
 }
 
-// Free endpoint - AVA status
+// Free endpoint - AVA info
 app.get("/", (req, res) => {
   res.json({
     name: "AVA - Autonomous Value Agent",
     description: "The first autonomous trading agent on X Layer",
     wallet: "0x00EdD1bE53767fD3e59F931B509176c7F50eC14d",
     status: "ACTIVE",
-    endpoints: {
-      free: ["/", "/health"],
-      paid: ["/api/signal", "/api/analysis", "/api/report"]
-    },
+    free: ["/", "/health", "/api/status"],
+    paid: ["/api/signal", "/api/analysis", "/api/report"],
     pricing: {
       signal: "$0.001 USDT per call",
       analysis: "$0.005 USDT per call",
@@ -88,16 +102,51 @@ app.get("/health", (req, res) => {
   res.json({ status: "AVA is alive and trading", timestamp: new Date().toISOString() });
 });
 
+// Free live status for dashboard
+app.get("/api/status", async (req, res) => {
+  try {
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+    const USDT = new ethers.Contract(
+      "0x1E4a5963aBFD975d8c9021ce480b42188849D41d",
+      ["function balanceOf(address) view returns (uint256)"],
+      provider
+    );
+    const balance = await USDT.balanceOf("0x00EdD1bE53767fD3e59F931B509176c7F50eC14d");
+    const usdt = parseFloat(ethers.formatUnits(balance, 6)).toFixed(2);
+
+    res.json({
+      status: "ACTIVE",
+      wallet: "0x00EdD1bE53767fD3e59F931B509176c7F50eC14d",
+      network: "X Layer",
+      balance: { usdt },
+      lastDecision: avaState.lastDecision,
+      lastTrade: avaState.lastTrade,
+      tradeCount: avaState.tradeCount,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.json({
+      status: "ACTIVE",
+      wallet: "0x00EdD1bE53767fD3e59F931B509176c7F50eC14d",
+      network: "X Layer",
+      lastDecision: avaState.lastDecision,
+      lastTrade: avaState.lastTrade,
+      tradeCount: avaState.tradeCount,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // PAID - Basic signal
 app.get("/api/signal", requirePayment, async (req, res) => {
   try {
-    const marketData = await getMarketData("OKB-USDT");
+    const marketData = await getMarketData("ETH-USDT");
     const decision = await makeDecision(marketData);
 
     res.json({
       signal: decision.action,
       confidence: decision.confidence,
-      token: decision.token || "OKB-USDT",
+      token: decision.token || "ETH-USDT",
       reasoning: decision.reasoning,
       timestamp: new Date().toISOString(),
       paymentTx: req.paymentTx
@@ -110,17 +159,12 @@ app.get("/api/signal", requirePayment, async (req, res) => {
 // PAID - Full market analysis
 app.get("/api/analysis", requirePayment, async (req, res) => {
   try {
-    const [okb, eth, btc] = await Promise.all([
-      getMarketData("OKB-USDT"),
-      getMarketData("ETH-USDT"),
-      getMarketData("BTC-USDT")
-    ]);
-
-    const decision = await makeDecision([okb, eth, btc]);
+    const marketData = await getMarketData("ETH-USDT");
+    const decision = await makeDecision(marketData);
 
     res.json({
       recommendation: decision,
-      markets: { okb, eth, btc },
+      market: marketData,
       timestamp: new Date().toISOString(),
       paymentTx: req.paymentTx
     });
@@ -132,22 +176,17 @@ app.get("/api/analysis", requirePayment, async (req, res) => {
 // PAID - Full report
 app.get("/api/report", requirePayment, async (req, res) => {
   try {
-    const [okb, eth, btc] = await Promise.all([
-      getMarketData("OKB-USDT"),
-      getMarketData("ETH-USDT"),
-      getMarketData("BTC-USDT")
-    ]);
-
-    const decision = await makeDecision([okb, eth, btc]);
+    const marketData = await getMarketData("ETH-USDT");
+    const decision = await makeDecision(marketData);
 
     res.json({
       title: "AVA Market Report",
       generated: new Date().toISOString(),
       topRecommendation: decision,
-      marketOverview: {
-        okb: { price: okb.price, change: okb.change24h, signal: okb.change24h > 0 ? "BULLISH" : "BEARISH" },
-        eth: { price: eth.price, change: eth.change24h, signal: eth.change24h > 0 ? "BULLISH" : "BEARISH" },
-        btc: { price: btc.price, change: btc.change24h, signal: btc.change24h > 0 ? "BULLISH" : "BEARISH" }
+      market: {
+        price: marketData.price,
+        change: marketData.change24h,
+        signal: marketData.change24h > 0 ? "BULLISH" : "BEARISH"
       },
       disclaimer: "AVA's signals are autonomous AI decisions. Not financial advice.",
       paymentTx: req.paymentTx
