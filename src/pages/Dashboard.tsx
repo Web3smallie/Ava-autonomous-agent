@@ -6,6 +6,7 @@ import TradingDecisionCard from "@/components/TradingDecisionCard";
 import PriceCard from "@/components/PriceCard";
 import EndpointsCard from "@/components/EndpointsCard";
 import TradeInfoCard from "@/components/TradeInfoCard";
+import BalanceCard from "@/components/BalanceCard";
 
 const Dashboard = () => {
   const { data, isLoading } = useAvaStatus();
