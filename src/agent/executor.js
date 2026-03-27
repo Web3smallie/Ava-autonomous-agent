@@ -5,7 +5,7 @@ require("dotenv").config();
 
 const USDT_ADDRESS = "0x1E4a5963aBFD975d8c9021ce480b42188849D41d";
 const WETH_ADDRESS = "0x5A77f1443D16ee5761d310e38b62f77f726bC71c";
-const REPUTATION_CONTRACT = "0xDfe2C8eCB7a247c504D4F4858b1eC3a97193F986";
+const REPUTATION_CONTRACT = "0xa45aACfC36B184Ef08C600DECACC4DC310ab0B1C";
 
 const REPUTATION_ABI = [
   "function recordTrade(bool success, uint256 usdtAmount) external",
