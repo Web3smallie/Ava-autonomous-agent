@@ -6,12 +6,13 @@ const { makeDecision } = require("../agent/brain");
 require("dotenv").config();
 
 const app = express();
-app.use(cors({
-  origin: "*"
-}));
+app.use(cors({ origin: "*" }));
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
+
+const REPUTATION_ABI = ["function getSignalPrice() public view returns (uint256)"];
+const REPUTATION_CONTRACT = "0xDfe2C8eCB7a247c504D4F4858b1eC3a97193F986";
 
 let avaState = {
   lastDecision: null,
@@ -28,16 +29,30 @@ app.updateState = (decision, trade) => {
   }
 };
 
+async function getDynamicPrice() {
+  try {
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+    const reputation = new ethers.Contract(REPUTATION_CONTRACT, REPUTATION_ABI, provider);
+    const price = await reputation.getSignalPrice();
+    console.log(`💰 Dynamic signal price: ${price.toString()} microUSDT`);
+    return price.toString();
+  } catch (e) {
+    console.log("⚠️ Using base price:", e.message);
+    return "1000";
+  }
+}
+
 async function requirePayment(req, res, next) {
   const payment = req.headers["x-payment"];
   if (!payment) {
+    const price = await getDynamicPrice();
     return res.status(402).json({
       error: "Payment Required",
       message: "This endpoint requires x402 payment",
       accepts: [{
         scheme: "exact",
         network: "xlayer",
-        maxAmountRequired: "1000",
+        maxAmountRequired: price,
         resource: req.path,
         description: "AVA trading signal",
         mimeType: "application/json",
@@ -68,9 +83,9 @@ app.get("/", (req, res) => {
     name: "AVA - Autonomous Value Agent",
     description: "The first autonomous trading agent on X Layer",
     wallet: "0x00EdD1bE53767fD3e59F931B509176c7F50eC14d",
-    free: ["/", "/health", "/api/status"],
+    free: ["/", "/health", "/api/status", "/api/reputation"],
     paid: ["/api/signal", "/api/analysis", "/api/report"],
-    pricing: { signal: "$0.001 USDT per call", analysis: "$0.005 USDT per call" }
+    pricing: { signal: "Dynamic — based on AVA's onchain reputation", analysis: "$0.005 USDT per call" }
   });
 });
 
@@ -88,7 +103,7 @@ app.get("/api/status", async (req, res) => {
     );
     const balance = await USDT.balanceOf("0x00EdD1bE53767fD3e59F931B509176c7F50eC14d");
     const usdt = parseFloat(ethers.formatUnits(balance, 6)).toFixed(2);
-    
+
     const marketData = await getMarketData("ETH-USDT");
     const decision = await makeDecision(marketData);
 
@@ -107,6 +122,34 @@ app.get("/api/status", async (req, res) => {
       network: "X Layer",
       timestamp: new Date().toISOString()
     });
+  }
+});
+
+app.get("/api/reputation", async (req, res) => {
+  try {
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+    const FULL_REPUTATION_ABI = [
+      "function getReputation() external view returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256)",
+      "function getSignalPrice() public view returns (uint256)"
+    ];
+    const reputation = new ethers.Contract(REPUTATION_CONTRACT, FULL_REPUTATION_ABI, provider);
+    const data = await reputation.getReputation();
+    const price = await reputation.getSignalPrice();
+
+    res.json({
+      totalTrades: data[0].toString(),
+      successfulTrades: data[1].toString(),
+      successRate: data[2].toString() + "%",
+      totalEarned: ethers.formatUnits(data[3], 6) + " USDT",
+      totalLost: ethers.formatUnits(data[4], 6) + " USDT",
+      signalsSold: data[5].toString(),
+      totalSignalRevenue: ethers.formatUnits(data[6], 6) + " USDT",
+      currentSignalPrice: ethers.formatUnits(price, 6) + " USDT",
+      lastUpdated: new Date(Number(data[8]) * 1000).toISOString(),
+      contract: REPUTATION_CONTRACT
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
