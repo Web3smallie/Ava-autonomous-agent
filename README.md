@@ -3,9 +3,13 @@
 > The first autonomous AI trading agent on X Layer with onchain reputation, dynamic pricing, and agent-to-agent x402 payments
 
 **Live Dashboard:** https://ava-nexus-view.vercel.app
+
 **API:** https://ava-autonomous-agent-production.up.railway.app
+
 **Network:** X Layer (Chain ID: 196)
+
 **Reputation Contract:** `0xa45aACfC36B184Ef08C600DECACC4DC310ab0B1C`
+
 **Submission TX:** `0xd0b9ee18e11c52a820fae92f9099251cec1c9922a38e6ee3c7d40d51ee6b2416`
 
 ## What Is AVA?
