@@ -5,6 +5,14 @@ require("dotenv").config();
 
 const USDT_ADDRESS = "0x1E4a5963aBFD975d8c9021ce480b42188849D41d";
 const WETH_ADDRESS = "0x5A77f1443D16ee5761d310e38b62f77f726bC71c";
+const REPUTATION_CONTRACT = "0xDfe2C8eCB7a247c504D4F4858b1eC3a97193F986";
+
+const REPUTATION_ABI = [
+  "function recordTrade(bool success, uint256 usdtAmount) external",
+  "function recordSignalSold(address buyer, uint256 price) external",
+  "function getReputation() external view returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256)",
+  "function getSignalPrice() public view returns (uint256)"
+];
 
 const DEX_ROUTER = "0xD1b8997AaC08c619d40Be2e4284c9C72cAB33954";
 const TOKEN_APPROVAL = "0x8b773D83bc66Be128c60e07E17C8901f7a64F000";
@@ -73,7 +81,7 @@ async function approveToken(tokenAddress, amount, wallet) {
   }
 }
 
-async function sendSwap(txData, wallet) {
+async function sendSwap(txData, wallet, decision) {
   const tx = await wallet.sendTransaction({
     to: DEX_ROUTER,
     data: txData.data,
@@ -90,9 +98,29 @@ async function sendSwap(txData, wallet) {
 
   if (receipt.status === 1) {
     console.log("🎉 SWAP SUCCESSFUL! Block:", receipt.blockNumber);
+
+    try {
+      const reputationContract = new ethers.Contract(REPUTATION_CONTRACT, REPUTATION_ABI, wallet);
+      const usdtAmount = ethers.parseUnits((decision?.amount_usdt || 1).toString(), 6);
+      await reputationContract.recordTrade(true, usdtAmount);
+      console.log("✅ Reputation updated onchain");
+    } catch (e) {
+      console.log("⚠️ Reputation update skipped:", e.message);
+    }
+
     return tx.hash;
   } else {
     console.log("❌ Swap reverted");
+
+    try {
+      const reputationContract = new ethers.Contract(REPUTATION_CONTRACT, REPUTATION_ABI, wallet);
+      const usdtAmount = ethers.parseUnits((decision?.amount_usdt || 1).toString(), 6);
+      await reputationContract.recordTrade(false, usdtAmount);
+      console.log("✅ Failed trade recorded onchain");
+    } catch (e) {
+      console.log("⚠️ Reputation update skipped:", e.message);
+    }
+
     return null;
   }
 }
@@ -113,7 +141,6 @@ async function executeSwap(decision) {
 
   try {
     if (decision.action === "BUY") {
-      // BUY: USDT → WETH ($1 per trade)
       console.log("🔄 AVA buying WETH with $1 USDT...");
       const amount = ethers.parseUnits("1", 6).toString();
 
@@ -122,10 +149,9 @@ async function executeSwap(decision) {
       console.log("📊 Getting quote...");
       const txData = await getQuote(USDT_ADDRESS, WETH_ADDRESS, amount, wallet.address);
 
-      return await sendSwap(txData, wallet);
+      return await sendSwap(txData, wallet, decision);
 
     } else if (decision.action === "SELL") {
-      // SELL: ALL WETH → USDT
       console.log("🔄 AVA selling WETH → USDT...");
 
       const wethContract = new ethers.Contract(WETH_ADDRESS, ERC20_ABI, provider);
@@ -148,7 +174,7 @@ async function executeSwap(decision) {
         wallet.address
       );
 
-      return await sendSwap(txData, wallet);
+      return await sendSwap(txData, wallet, decision);
     }
 
   } catch (error) {
