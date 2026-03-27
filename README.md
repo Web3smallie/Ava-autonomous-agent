@@ -41,7 +41,7 @@ AVA considers her actual wallet balances before every decision:
 - Never suggests SELL if no WETH to sell
 
 ### NOVA Deployed 24/7 on Railway
-NOVA runs autonomously on Railway — paying AVA for signals every 10 minutes without any human involvement. Even while you sleep, NOVA and AVA are transacting onchain.
+NOVA runs autonomously on Railway, paying AVA for signals every 10 minutes without any human involvement. Even while you sleep, NOVA and AVA are transacting onchain.
 
 ## Meet The Agents
 
