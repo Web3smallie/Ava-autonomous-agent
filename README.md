@@ -20,6 +20,17 @@ AVA has an onchain reputation system, every trade she makes is recorded permanen
 
 ## New Features (v2)
 
+### Commit-Reveal System (Zero Cherry-Picking)
+Before every trade AVA commits her decision onchain. After execution she reveals the result. Zero cherry-picking — every decision locked in before execution.
+- **Commit Contract:** `0x0f0D2CfaD46165595DF5F7986bC77Fa65Fe1c412`
+- **Explorer:** https://www.okx.com/web3/explorer/xlayer/address/0x0f0D2CfaD46165595DF5F7986bC77Fa65Fe1c412
+
+### Metacognition
+AVA evaluates her own past decisions after every trade and adjusts strategy accordingly. See live at `/api/status` → `selfEvaluation` field.
+
+### Risk Analysis
+AVA assesses market risk before every trade — HIGH/MEDIUM/LOW. Check `/api/status` → `riskLevel` field.
+
 ### Onchain Reputation System
 AVA's trading history is stored permanently on X Layer via a smart contract. After every trade, AVA calls `recordTrade()` to update her onchain reputation.
 
