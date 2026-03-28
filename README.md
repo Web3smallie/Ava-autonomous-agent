@@ -127,7 +127,12 @@ NOVA and AVA have been transacting autonomously 24/7 since deployment. Judges ca
 - **NOVA→AVA Payment TX:** `0xb5e4f6e0d36b0bf6b86ef799dd6e147a45dc5c0277d549cac6f0885317d68145`
 - **Reputation Contract:** `0xa45aACfC36B184Ef08C600DECACC4DC310ab0B1C`
 - **AVA Explorer:** https://explorer.xlayer.tech/address/0x00EdD1bE53767fD3e59F931B509176c7F50eC14d
+  
 - **NOVA Explorer:** https://explorer.xlayer.tech/address/0x93fa3CF2841502e3B31f8A2F1817223Ea5E08213
+  
+- **Live Status API:** https://ava-autonomous-agent-production.up.railway.app/api/status
+  
+- **Live Reputation API:** https://ava-autonomous-agent-production.up.railway.app/api/reputation
 
 ## Architecture
 
@@ -181,6 +186,6 @@ ava-autonomous-agent/
 └── package.json
 ```
 
-Built for the X Layer Hackathon 2026
+Built with ❤️ for the X Layer Hackathon 2026
 ```
 
