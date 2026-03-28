@@ -6,12 +6,18 @@ require("dotenv").config();
 const USDT_ADDRESS = "0x1E4a5963aBFD975d8c9021ce480b42188849D41d";
 const WETH_ADDRESS = "0x5A77f1443D16ee5761d310e38b62f77f726bC71c";
 const REPUTATION_CONTRACT = "0xa45aACfC36B184Ef08C600DECACC4DC310ab0B1C";
+const COMMIT_CONTRACT = "0x0f0D2CfaD46165595DF5F7986bC77Fa65Fe1c412";
 
 const REPUTATION_ABI = [
   "function recordTrade(bool success, uint256 usdtAmount) external",
   "function recordSignalSold(address buyer, uint256 price) external",
   "function getReputation() external view returns (uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256)",
   "function getSignalPrice() public view returns (uint256)"
+];
+
+const COMMIT_ABI = [
+  "function commitDecision(bytes32 commitHash) external returns (uint256)",
+  "function revealDecision(uint256 commitId, string calldata action, bytes32 salt) external"
 ];
 
 const DEX_ROUTER = "0xD1b8997AaC08c619d40Be2e4284c9C72cAB33954";
@@ -78,6 +84,37 @@ async function approveToken(tokenAddress, amount, wallet) {
     console.log("✅ Approved");
   } else {
     console.log("✅ Already approved");
+  }
+}
+
+async function commitDecision(decision, wallet) {
+  try {
+    const salt = ethers.id(Date.now().toString());
+    const commitHash = ethers.keccak256(
+      ethers.AbiCoder.defaultAbiCoder().encode(
+        ["string", "bytes32"],
+        [decision.action, salt]
+      )
+    );
+    const commitContract = new ethers.Contract(COMMIT_CONTRACT, COMMIT_ABI, wallet);
+    const tx = await commitContract.commitDecision(commitHash);
+    const receipt = await tx.wait();
+    const commitId = receipt.logs[0]?.topics?.[1];
+    console.log(`🔒 Decision committed onchain: ${decision.action} (ID: ${commitId})`);
+    return { commitId, salt };
+  } catch (e) {
+    console.log("⚠️ Commit skipped:", e.message);
+    return null;
+  }
+}
+
+async function revealDecision(commitId, action, salt, wallet) {
+  try {
+    const commitContract = new ethers.Contract(COMMIT_CONTRACT, COMMIT_ABI, wallet);
+    await commitContract.revealDecision(commitId, action, salt);
+    console.log(`🔓 Decision revealed onchain: ${action}`);
+  } catch (e) {
+    console.log("⚠️ Reveal skipped:", e.message);
   }
 }
 
@@ -149,7 +186,16 @@ async function executeSwap(decision) {
       console.log("📊 Getting quote...");
       const txData = await getQuote(USDT_ADDRESS, WETH_ADDRESS, amount, wallet.address);
 
-      return await sendSwap(txData, wallet, decision);
+      // Commit before swap
+      const commit = await commitDecision(decision, wallet);
+
+      // Execute swap
+      const txHash = await sendSwap(txData, wallet, decision);
+
+      // Reveal after swap
+      if (commit) await revealDecision(commit.commitId, decision.action, commit.salt, wallet);
+
+      return txHash;
 
     } else if (decision.action === "SELL") {
       console.log("🔄 AVA selling WETH → USDT...");
@@ -174,7 +220,16 @@ async function executeSwap(decision) {
         wallet.address
       );
 
-      return await sendSwap(txData, wallet, decision);
+      // Commit before swap
+      const commit = await commitDecision(decision, wallet);
+
+      // Execute swap
+      const txHash = await sendSwap(txData, wallet, decision);
+
+      // Reveal after swap
+      if (commit) await revealDecision(commit.commitId, decision.action, commit.salt, wallet);
+
+      return txHash;
     }
 
   } catch (error) {
