@@ -14,6 +14,11 @@ const PORT = process.env.PORT || 3000;
 const REPUTATION_ABI = ["function getSignalPrice() public view returns (uint256)"];
 const REPUTATION_CONTRACT = "0xa45aACfC36B184Ef08C600DECACC4DC310ab0B1C";
 
+// Cache decision to avoid hitting Claude API on every request
+let cachedDecision = null;
+let lastDecisionTime = 0;
+const DECISION_CACHE_MS = 5 * 60 * 1000; // 5 minutes
+
 let avaState = {
   lastDecision: null,
   lastTrade: null,
@@ -28,6 +33,21 @@ app.updateState = (decision, trade) => {
     avaState.tradeCount++;
   }
 };
+
+async function getCachedDecision() {
+  const now = Date.now();
+  if (!cachedDecision || now - lastDecisionTime > DECISION_CACHE_MS) {
+    try {
+      const marketData = await getMarketData("ETH-USDT");
+      cachedDecision = await makeDecision(marketData);
+      lastDecisionTime = now;
+      console.log("🔄 Decision cache refreshed");
+    } catch (e) {
+      console.log("⚠️ Using previous cached decision:", e.message);
+    }
+  }
+  return cachedDecision;
+}
 
 async function getDynamicPrice() {
   try {
@@ -104,8 +124,7 @@ app.get("/api/status", async (req, res) => {
     const balance = await USDT.balanceOf("0x00EdD1bE53767fD3e59F931B509176c7F50eC14d");
     const usdt = parseFloat(ethers.formatUnits(balance, 6)).toFixed(2);
 
-    const marketData = await getMarketData("ETH-USDT");
-    const decision = await makeDecision(marketData);
+    const decision = await getCachedDecision();
 
     res.json({
       status: "ACTIVE",
@@ -155,13 +174,14 @@ app.get("/api/reputation", async (req, res) => {
 
 app.get("/api/signal", requirePayment, async (req, res) => {
   try {
-    const marketData = await getMarketData("ETH-USDT");
-    const decision = await makeDecision(marketData);
+    const decision = await getCachedDecision();
     res.json({
       signal: decision.action,
       confidence: decision.confidence,
       token: "ETH-USDT",
       reasoning: decision.reasoning,
+      selfEvaluation: decision.selfEvaluation,
+      riskLevel: decision.riskLevel,
       timestamp: new Date().toISOString(),
       paymentTx: req.paymentTx
     });
@@ -173,7 +193,7 @@ app.get("/api/signal", requirePayment, async (req, res) => {
 app.get("/api/analysis", requirePayment, async (req, res) => {
   try {
     const marketData = await getMarketData("ETH-USDT");
-    const decision = await makeDecision(marketData);
+    const decision = await getCachedDecision();
     res.json({ recommendation: decision, market: marketData, timestamp: new Date().toISOString(), paymentTx: req.paymentTx });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -182,8 +202,7 @@ app.get("/api/analysis", requirePayment, async (req, res) => {
 
 app.get("/api/report", requirePayment, async (req, res) => {
   try {
-    const marketData = await getMarketData("ETH-USDT");
-    const decision = await makeDecision(marketData);
+    const decision = await getCachedDecision();
     res.json({
       title: "AVA Market Report",
       generated: new Date().toISOString(),
