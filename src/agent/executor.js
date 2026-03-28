@@ -91,11 +91,11 @@ async function commitDecision(decision, wallet) {
   try {
     const salt = ethers.id(Date.now().toString());
     const commitHash = ethers.keccak256(
-      ethers.AbiCoder.defaultAbiCoder().encode(
-        ["string", "bytes32"],
-        [decision.action, salt]
-      )
-    );
+  ethers.solidityPacked(
+    ["string", "bytes32"],
+    [decision.action, salt]
+  )
+);
     const commitContract = new ethers.Contract(COMMIT_CONTRACT, COMMIT_ABI, wallet);
     const tx = await commitContract.commitDecision(commitHash);
     const receipt = await tx.wait();
