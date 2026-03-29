@@ -17,7 +17,7 @@ const REPUTATION_CONTRACT = "0xa45aACfC36B184Ef08C600DECACC4DC310ab0B1C";
 // Cache decision to avoid hitting Claude API on every request
 let cachedDecision = null;
 let lastDecisionTime = 0;
-const DECISION_CACHE_MS = 5 * 60 * 1000; // 5 minutes
+const DECISION_CACHE_MS = 15 * 60 * 1000; // 15 minutes
 
 let avaState = {
   lastDecision: null,
