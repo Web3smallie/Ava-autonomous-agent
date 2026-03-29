@@ -20,6 +20,17 @@ AVA has an onchain reputation system, every trade she makes is recorded permanen
 
 ## New Features (v2)
 
+### Commit-Reveal System (Zero Cherry-Picking)
+Before every trade AVA commits her decision onchain. After execution she reveals the result. Zero cherry-picking — every decision locked in before execution.
+- **Commit Contract:** `0x0f0D2CfaD46165595DF5F7986bC77Fa65Fe1c412`
+- **Explorer:** https://www.okx.com/web3/explorer/xlayer/address/0x0f0D2CfaD46165595DF5F7986bC77Fa65Fe1c412
+
+### Metacognition
+AVA evaluates her own past decisions after every trade and adjusts strategy accordingly. See live at `/api/status` → `selfEvaluation` field.
+
+### Risk Analysis
+AVA assesses market risk before every trade — HIGH/MEDIUM/LOW. Check `/api/status` → `riskLevel` field.
+
 ### Onchain Reputation System
 AVA's trading history is stored permanently on X Layer via a smart contract. After every trade, AVA calls `recordTrade()` to update her onchain reputation.
 
@@ -116,7 +127,12 @@ NOVA and AVA have been transacting autonomously 24/7 since deployment. Judges ca
 - **NOVA→AVA Payment TX:** `0xb5e4f6e0d36b0bf6b86ef799dd6e147a45dc5c0277d549cac6f0885317d68145`
 - **Reputation Contract:** `0xa45aACfC36B184Ef08C600DECACC4DC310ab0B1C`
 - **AVA Explorer:** https://explorer.xlayer.tech/address/0x00EdD1bE53767fD3e59F931B509176c7F50eC14d
+  
 - **NOVA Explorer:** https://explorer.xlayer.tech/address/0x93fa3CF2841502e3B31f8A2F1817223Ea5E08213
+  
+- **Live Status API:** https://ava-autonomous-agent-production.up.railway.app/api/status
+  
+- **Live Reputation API:** https://ava-autonomous-agent-production.up.railway.app/api/reputation
 
 ## Architecture
 
@@ -170,6 +186,6 @@ ava-autonomous-agent/
 └── package.json
 ```
 
-Built for the X Layer Hackathon 2026
+Built with ❤️ for the X Layer Hackathon 2026
 ```
 
