@@ -4,8 +4,16 @@ require("dotenv").config();
 
 const client = new Anthropic.default({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Store recent decisions in memory for self-evaluation
-const recentDecisions = [];
+const AVABRAIN_CONTRACT = "0x4480d1B373Fb27254F95504A68E170E13b05bCeA";
+
+const AVABRAIN_ABI = [
+  "function recordDecision(string action, uint256 confidence, string reasoning, string selfEvaluation, string riskLevel, uint256 ethPrice, uint256 cycleNumber) external returns (uint256)",
+  "function getRecentDecisions(uint256 count) external view returns (string[] memory, uint256[] memory, uint256[] memory)",
+  "function getBrainStats() external view returns (uint256, uint256, uint256, uint256, uint256)",
+  "function getAccuracyRate() external view returns (uint256)"
+];
+
+let cycleNumber = 0;
 
 async function getBalances() {
   try {
@@ -27,24 +35,64 @@ async function getBalances() {
   }
 }
 
-function getSelfEvaluationContext() {
-  if (recentDecisions.length === 0) {
-    return "This is my first decision. No prior history to evaluate.";
+async function getOnchainMemory() {
+  try {
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+    const brain = new ethers.Contract(AVABRAIN_CONTRACT, AVABRAIN_ABI, provider);
+    const [actions, confidences, timestamps] = await brain.getRecentDecisions(5);
+    
+    if (actions.length === 0) return "No onchain memory yet. This is AVA's first recorded decision.";
+    
+    const summary = actions.map((action, i) => {
+      const date = new Date(Number(timestamps[i]) * 1000).toISOString();
+      const conf = (Number(confidences[i]) / 100).toFixed(2);
+      return `Decision ${i + 1}: ${action} (confidence: ${conf}) at ${date}`;
+    }).join("\n");
+    
+    return `My last ${actions.length} onchain decisions:\n${summary}`;
+  } catch (e) {
+    console.log("⚠️ Could not fetch onchain memory:", e.message);
+    return "Onchain memory temporarily unavailable.";
   }
-  const summary = recentDecisions.slice(-5).map((d, i) =>
-    `Decision ${i + 1}: ${d.action} (confidence: ${d.confidence}) — ${d.reasoning}`
-  ).join("\n");
-  return `My last ${recentDecisions.slice(-5).length} decisions:\n${summary}`;
+}
+
+async function recordToOnchainBrain(decision, ethPrice) {
+  try {
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+    const wallet = new ethers.Wallet(process.env.AGENT_PRIVATE_KEY, provider);
+    const brain = new ethers.Contract(AVABRAIN_CONTRACT, AVABRAIN_ABI, wallet);
+    
+    const confidenceInt = Math.round(decision.confidence * 100);
+    const ethPriceInt = Math.round(parseFloat(ethPrice) * 100);
+    
+    const tx = await brain.recordDecision(
+      decision.action,
+      confidenceInt,
+      decision.reasoning,
+      decision.selfEvaluation || "No evaluation",
+      decision.riskLevel || "MEDIUM",
+      ethPriceInt,
+      cycleNumber
+    );
+    
+    await tx.wait();
+    console.log("🧠 Decision recorded to AVABrain onchain!");
+  } catch (e) {
+    console.log("⚠️ Brain recording skipped:", e.message);
+  }
 }
 
 async function makeDecision(marketData, retries = 3) {
   const d = Array.isArray(marketData) ? marketData[0] : marketData;
   const balances = await getBalances();
-  const selfContext = getSelfEvaluationContext();
+  const onchainMemory = await getOnchainMemory();
+  
+  cycleNumber++;
 
   console.log(`💰 Balances: ${balances.usdt} USDT | ${balances.weth} WETH`);
+  console.log(`🔄 Cycle #${cycleNumber}`);
 
-  const prompt = `You are AVA, an autonomous trading agent on X Layer blockchain. You have metacognitive awareness — you evaluate your own past decisions and improve your strategy over time.
+  const prompt = `You are AVA, an autonomous trading agent on X Layer blockchain. You have metacognitive awareness and a permanent onchain memory — you evaluate your own past decisions and improve your strategy over time.
 
 Market Data for ETH-USDT:
 - Price: $${d.price}
@@ -57,8 +105,8 @@ Current Balances:
 - USDT: ${balances.usdt}
 - WETH: ${balances.weth}
 
-Your Recent Decision History (for self-evaluation):
-${selfContext}
+Your Permanent Onchain Memory (stored on X Layer blockchain):
+${onchainMemory}
 
 Trading Rules:
 - Only trade ETH-USDT
@@ -78,9 +126,9 @@ Risk Assessment:
 - If market is highly volatile → increase caution
 
 Metacognition:
-- Review your recent decisions above
+- Review your onchain memory above
 - If you have been making the same decision repeatedly, question if it is still valid
-- Adjust your confidence based on your recent performance
+- Adjust your confidence based on your recent onchain performance
 - Be honest about uncertainty
 
 Respond ONLY with a valid JSON object:
@@ -88,7 +136,7 @@ Respond ONLY with a valid JSON object:
   "action": "BUY or SELL or HOLD",
   "confidence": 0.0 to 1.0,
   "reasoning": "one sentence explanation",
-  "selfEvaluation": "one sentence about what you learned from recent decisions",
+  "selfEvaluation": "one sentence about what you learned from your onchain memory",
   "riskLevel": "LOW, MEDIUM, or HIGH",
   "token": "ETH-USDT",
   "amount_usdt": 1
@@ -106,20 +154,15 @@ Respond ONLY with a valid JSON object:
       const clean = text.replace(/```json|```/g, "").trim();
       const decision = JSON.parse(clean);
 
-      // Store decision for future self-evaluation
-      recentDecisions.push({
-        action: decision.action,
-        confidence: decision.confidence,
-        reasoning: decision.reasoning,
-        timestamp: new Date().toISOString()
-      });
-
-      // Keep only last 10 decisions
-      if (recentDecisions.length > 10) recentDecisions.shift();
-
       console.log("🧠 AVA Decision:", JSON.stringify(decision, null, 2));
       console.log("🔍 Self Evaluation:", decision.selfEvaluation);
       console.log("⚠️  Risk Level:", decision.riskLevel);
+
+      // Record to onchain brain (non-blocking)
+      recordToOnchainBrain(decision, d.price).catch(e => 
+        console.log("⚠️ Brain record failed:", e.message)
+      );
+
       return decision;
 
     } catch (error) {
