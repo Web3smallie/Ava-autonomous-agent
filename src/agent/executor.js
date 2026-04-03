@@ -7,6 +7,7 @@ const USDT_ADDRESS = "0x1E4a5963aBFD975d8c9021ce480b42188849D41d";
 const WETH_ADDRESS = "0x5A77f1443D16ee5761d310e38b62f77f726bC71c";
 const REPUTATION_CONTRACT = "0xa45aACfC36B184Ef08C600DECACC4DC310ab0B1C";
 const COMMIT_CONTRACT = "0x0f0D2CfaD46165595DF5F7986bC77Fa65Fe1c412";
+const PROOF_CONTRACT = "0xA7019A7D192BE0Fb9Da4EC1CD43eA59AA06E8026";
 
 const REPUTATION_ABI = [
   "function recordTrade(bool success, uint256 usdtAmount) external",
@@ -20,6 +21,11 @@ const COMMIT_ABI = [
   "function revealDecision(uint256 commitId, string calldata action, bytes32 salt) external"
 ];
 
+const PROOF_ABI = [
+  "function proveAutonomousExecution(bytes32 codeHash, uint256 cycleNumber, string calldata action) external returns (uint256)",
+  "function verifyAutonomy() external view returns (uint256, uint256, uint256, bool)"
+];
+
 const DEX_ROUTER = "0xD1b8997AaC08c619d40Be2e4284c9C72cAB33954";
 const TOKEN_APPROVAL = "0x8b773D83bc66Be128c60e07E17C8901f7a64F000";
 
@@ -28,6 +34,11 @@ const ERC20_ABI = [
   "function allowance(address owner, address spender) view returns (uint256)",
   "function balanceOf(address owner) view returns (uint256)"
 ];
+
+// Code hash — proves this specific version of AVA's code is running
+const CODE_HASH = ethers.keccak256(ethers.toUtf8Bytes("AVA-autonomous-agent-v2-xlayer"));
+
+let executionCycle = 0;
 
 function getHeaders(timestamp, method, path, queryString = "") {
   const message = timestamp + method + path + queryString;
@@ -87,15 +98,30 @@ async function approveToken(tokenAddress, amount, wallet) {
   }
 }
 
+async function proveAutonomousExecution(decision, wallet) {
+  try {
+    const proofContract = new ethers.Contract(PROOF_CONTRACT, PROOF_ABI, wallet);
+    const tx = await proofContract.proveAutonomousExecution(
+      CODE_HASH,
+      executionCycle,
+      decision.action
+    );
+    await tx.wait();
+    console.log(`✅ Autonomous execution proved onchain (Cycle #${executionCycle})`);
+  } catch (e) {
+    console.log("⚠️ Proof skipped:", e.message);
+  }
+}
+
 async function commitDecision(decision, wallet) {
   try {
     const salt = ethers.id(Date.now().toString());
     const commitHash = ethers.keccak256(
-  ethers.solidityPacked(
-    ["string", "bytes32"],
-    [decision.action, salt]
-  )
-);
+      ethers.solidityPacked(
+        ["string", "bytes32"],
+        [decision.action, salt]
+      )
+    );
     const commitContract = new ethers.Contract(COMMIT_CONTRACT, COMMIT_ABI, wallet);
     const tx = await commitContract.commitDecision(commitHash);
     const receipt = await tx.wait();
@@ -173,6 +199,7 @@ async function executeSwap(decision) {
     return null;
   }
 
+  executionCycle++;
   const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
   const wallet = new ethers.Wallet(process.env.AGENT_PRIVATE_KEY, provider);
 
@@ -185,6 +212,9 @@ async function executeSwap(decision) {
 
       console.log("📊 Getting quote...");
       const txData = await getQuote(USDT_ADDRESS, WETH_ADDRESS, amount, wallet.address);
+
+      // Prove autonomous execution
+      await proveAutonomousExecution(decision, wallet);
 
       // Commit before swap
       const commit = await commitDecision(decision, wallet);
@@ -219,6 +249,9 @@ async function executeSwap(decision) {
         wethBalance.toString(),
         wallet.address
       );
+
+      // Prove autonomous execution
+      await proveAutonomousExecution(decision, wallet);
 
       // Commit before swap
       const commit = await commitDecision(decision, wallet);
