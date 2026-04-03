@@ -1,7 +1,11 @@
 require("dotenv").config();
 
 // Start AVA signal server
-require("./src/api/server");
+const app = require("./src/api/server");
+
+// Mount MCP server
+const mcpApp = require("./src/mcp/server");
+app.use(mcpApp);
 
 // Start AVA trading loop
 setTimeout(() => {
