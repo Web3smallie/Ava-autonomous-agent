@@ -14,10 +14,23 @@ const PORT = process.env.PORT || 3000;
 const REPUTATION_ABI = ["function getSignalPrice() public view returns (uint256)"];
 const REPUTATION_CONTRACT = "0xa45aACfC36B184Ef08C600DECACC4DC310ab0B1C";
 
-// Cache decision to avoid hitting Claude API on every request
+// Live activity log
+const activityLog = [];
+const originalLog = console.log;
+console.log = (...args) => {
+  originalLog(...args);
+  const message = args.join(' ');
+  activityLog.unshift({
+    message,
+    timestamp: new Date().toISOString()
+  });
+  if (activityLog.length > 200) activityLog.pop();
+};
+
+// Cache decision
 let cachedDecision = null;
 let lastDecisionTime = 0;
-const DECISION_CACHE_MS = 15 * 60 * 1000; // 15 minutes
+const DECISION_CACHE_MS = 15 * 60 * 1000;
 
 let avaState = {
   lastDecision: null,
@@ -103,7 +116,7 @@ app.get("/", (req, res) => {
     name: "AVA - Autonomous Value Agent",
     description: "The first autonomous trading agent on X Layer",
     wallet: "0x00EdD1bE53767fD3e59F931B509176c7F50eC14d",
-    free: ["/", "/health", "/api/status", "/api/reputation"],
+    free: ["/", "/health", "/api/status", "/api/reputation", "/api/logs"],
     paid: ["/api/signal", "/api/analysis", "/api/report"],
     pricing: { signal: "Dynamic — based on AVA's onchain reputation", analysis: "$0.005 USDT per call" }
   });
@@ -111,6 +124,14 @@ app.get("/", (req, res) => {
 
 app.get("/health", (req, res) => {
   res.json({ status: "AVA is alive and trading", timestamp: new Date().toISOString() });
+});
+
+app.get("/api/logs", (req, res) => {
+  res.json({
+    logs: activityLog,
+    total: activityLog.length,
+    timestamp: new Date().toISOString()
+  });
 });
 
 app.get("/api/status", async (req, res) => {
@@ -123,9 +144,7 @@ app.get("/api/status", async (req, res) => {
     );
     const balance = await USDT.balanceOf("0x00EdD1bE53767fD3e59F931B509176c7F50eC14d");
     const usdt = parseFloat(ethers.formatUnits(balance, 6)).toFixed(2);
-
     const decision = await getCachedDecision();
-
     res.json({
       status: "ACTIVE",
       wallet: "0x00EdD1bE53767fD3e59F931B509176c7F50eC14d",
@@ -154,7 +173,6 @@ app.get("/api/reputation", async (req, res) => {
     const reputation = new ethers.Contract(REPUTATION_CONTRACT, FULL_REPUTATION_ABI, provider);
     const data = await reputation.getReputation();
     const price = await reputation.getSignalPrice();
-
     res.json({
       totalTrades: data[0].toString(),
       successfulTrades: data[1].toString(),
