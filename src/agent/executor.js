@@ -363,4 +363,4 @@ async function executeSwap(decision, marketData) {
   }
 }
 
-module.exports = { executeSwap, activeTokenId: () => activeTokenId };
+module.exports = { executeSwap, ensureNOVADelegation, activeTokenId: () => activeTokenId };

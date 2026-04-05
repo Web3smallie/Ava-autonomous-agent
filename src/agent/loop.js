@@ -1,6 +1,6 @@
 const { getMarketData } = require("./market");
 const { makeDecision } = require("./brain");
-const { executeSwap } = require("./executor");
+const { executeSwap, ensureNOVADelegation } = require("./executor");
 const { ethers } = require("ethers");
 require("dotenv").config();
 
@@ -70,6 +70,7 @@ async function runCycle() {
       return;
     }
 
+    await ensureNOVADelegation(wallet, provider);
     console.log("👀 Fetching market data...");
     const marketData = await getMarketData("ETH-USDT");
 
