@@ -1,6 +1,7 @@
 const { ethers } = require("ethers");
 const axios = require("axios");
 require("dotenv").config();
+
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const USDT_ADDRESS = "0x1E4a5963aBFD975d8c9021ce480b42188849D41d";
@@ -41,42 +42,10 @@ async function discoverLatestDelegation() {
     const scanDepth = 10000;
     const chunkSize = 100;
 
-    for (let i = 0; i < scanDepth; i += chunkSize) {
-      const toBlock = currentBlock - i;
-      const fromBlock = Math.max(0, toBlock - chunkSize);
-      console.log(`📡 Scanning blocks ${fromBlock} to ${toBlock}...`);
+    for (let i = scanDepth; i >= 0; i -= chunkSize) {
+      const fromBlock = Math.max(0, currentBlock - i);
+      const toBlock = Math.min(currentBlock, fromBlock + chunkSize);
 
-      const filter = xauthContract.filters.DelegationCreated(null, null, novaWallet.address);
-      const events = await xauthContract.queryFilter(filter, fromBlock, toBlock);
-
-      if (events.length > 0) {
-        const latestEvent = events[events.length - 1];
-        const tokenId = latestEvent.args[0];
-        if (await checkTokenValidity(tokenId)) {
-          console.log(`✅ XAuth: Active delegation found! Token: ${tokenId}`);
-          return tokenId;
-        }
-      }
-
-      await sleep(500);
-    }
-
-    console.log("⚠️ XAuth: No active delegation found");
-    return null;
-  } catch (e) {
-    console.log("⚠️ XAuth discovery failed:", e.message);
-    return null;
-  }
-}async function discoverLatestDelegation() {
-  try {
-    console.log("🔍 NOVA scanning blockchain for active delegation...");
-    const currentBlock = await provider.getBlockNumber();
-    const scanDepth = 1000;
-    const chunkSize = 100;
-
-    for (let i = 0; i < scanDepth; i += chunkSize) {
-      const toBlock = currentBlock - i;
-      const fromBlock = Math.max(0, toBlock - chunkSize);
       console.log(`📡 Scanning blocks ${fromBlock} to ${toBlock}...`);
 
       const filter = xauthContract.filters.DelegationCreated(null, null, novaWallet.address);
@@ -101,6 +70,7 @@ async function discoverLatestDelegation() {
     return null;
   }
 }
+
 async function payForSignal() {
   console.log("🤖 NOVA requesting signal from AVA...");
 
@@ -114,7 +84,6 @@ async function payForSignal() {
     }
   }
 
-  // Try XAuth first
   if (currentTokenId) {
     try {
       const amount = ethers.parseUnits(PAYMENT_AMOUNT, 6);
@@ -154,7 +123,6 @@ async function payForSignal() {
     }
   }
 
-  // Fallback — direct payment
   console.log("💸 NOVA paying AVA $" + PAYMENT_AMOUNT + " USDT directly...");
   const usdt = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, novaWallet);
   const paymentTx = await usdt.transfer(AVA_WALLET, ethers.parseUnits(PAYMENT_AMOUNT, 6));
@@ -185,11 +153,12 @@ async function payForSignal() {
 async function runCycle(cycleCount) {
   console.log("\n🔄 NOVA Cycle #" + cycleCount + " - " + new Date().toISOString());
   console.log("─────────────────────────────────────");
+
   try {
-  const usdt = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, novaWallet);
-  const balance = await usdt.balanceOf(novaWallet.address);
-  console.log(`💰 NOVA Balance: ${ethers.formatUnits(balance, 6)} USDT`);
-} catch (e) {}
+    const usdt = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, novaWallet);
+    const balance = await usdt.balanceOf(novaWallet.address);
+    console.log(`💰 NOVA Balance: ${ethers.formatUnits(balance, 6)} USDT`);
+  } catch (e) {}
 
   if (currentTokenId) {
     const valid = await checkTokenValidity(currentTokenId);
@@ -224,7 +193,6 @@ async function startNova() {
   console.log("🤖 NOVA wallet:", novaWallet.address);
 
   currentTokenId = await discoverLatestDelegation();
-  listenForNewDelegations();
 
   let cycleCount = 0;
   cycleCount++;
