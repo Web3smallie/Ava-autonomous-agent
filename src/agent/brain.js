@@ -146,7 +146,7 @@ Trading Rules:
 - Amount is always exactly 1 USDT per trade
 - NEVER suggest BUY if USDT < 1
 - NEVER suggest SELL if WETH = 0
-- Minimum confidence to trade is 0.65
+- Minimum confidence to trade is 0.50
 
 Technical Analysis Rules:
 - RSI < 30 → strong BUY signal (oversold)
@@ -155,7 +155,7 @@ Technical Analysis Rules:
 - MACD BEARISH + RSI > 50 → SELL confirmation
 - Price near Support → consider BUY
 - Price near Resistance → consider SELL
-- Bollinger Squeeze → wait for breakout direction
+- Bollinger Squeeze → slight caution but still trade if other indicators agree
 - Overall BULLISH sentiment → favor BUY
 - Overall BEARISH sentiment → favor SELL
 - NEUTRAL sentiment → HOLD unless other signals strong
