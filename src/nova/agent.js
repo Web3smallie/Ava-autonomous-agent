@@ -37,8 +37,8 @@ async function discoverLatestDelegation() {
   try {
     console.log("🔍 NOVA scanning blockchain for active delegation...");
     const currentBlock = await provider.getBlockNumber();
-    const scanDepth = 50000;
-    const chunkSize = 10000;
+    const scanDepth = 1000;
+    const chunkSize = 100;
 
     for (let i = 0; i < scanDepth; i += chunkSize) {
       const toBlock = currentBlock - i;
@@ -64,20 +64,6 @@ async function discoverLatestDelegation() {
     console.log("⚠️ XAuth discovery failed:", e.message);
     return null;
   }
-}
-
-function listenForNewDelegations() {
-  console.log("👂 NOVA listening for new delegations from AVA...");
-  xauthContract.on("DelegationCreated", async (tokenId, principal, worker) => {
-    if (worker.toLowerCase() === novaWallet.address.toLowerCase()) {
-      console.log(`\n🚀 NOVA: New delegation received from AVA!`);
-      console.log(`🎫 Token: ${tokenId}`);
-      if (await checkTokenValidity(tokenId)) {
-        currentTokenId = tokenId;
-        console.log("✅ XAuth: Token activated — NOVA ready to work!");
-      }
-    }
-  });
 }
 
 async function payForSignal() {
