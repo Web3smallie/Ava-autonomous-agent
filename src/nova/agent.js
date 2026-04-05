@@ -1,6 +1,7 @@
 const { ethers } = require("ethers");
 const axios = require("axios");
 require("dotenv").config();
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const USDT_ADDRESS = "0x1E4a5963aBFD975d8c9021ce480b42188849D41d";
 const AVA_API = "https://ava-autonomous-agent-production.up.railway.app";
@@ -56,6 +57,41 @@ async function discoverLatestDelegation() {
           return tokenId;
         }
       }
+
+      await sleep(500);
+    }
+
+    console.log("⚠️ XAuth: No active delegation found");
+    return null;
+  } catch (e) {
+    console.log("⚠️ XAuth discovery failed:", e.message);
+    return null;
+  }
+}async function discoverLatestDelegation() {
+  try {
+    console.log("🔍 NOVA scanning blockchain for active delegation...");
+    const currentBlock = await provider.getBlockNumber();
+    const scanDepth = 1000;
+    const chunkSize = 100;
+
+    for (let i = 0; i < scanDepth; i += chunkSize) {
+      const toBlock = currentBlock - i;
+      const fromBlock = Math.max(0, toBlock - chunkSize);
+      console.log(`📡 Scanning blocks ${fromBlock} to ${toBlock}...`);
+
+      const filter = xauthContract.filters.DelegationCreated(null, null, novaWallet.address);
+      const events = await xauthContract.queryFilter(filter, fromBlock, toBlock);
+
+      if (events.length > 0) {
+        const latestEvent = events[events.length - 1];
+        const tokenId = latestEvent.args[0];
+        if (await checkTokenValidity(tokenId)) {
+          console.log(`✅ XAuth: Active delegation found! Token: ${tokenId}`);
+          return tokenId;
+        }
+      }
+
+      await sleep(500);
     }
 
     console.log("⚠️ XAuth: No active delegation found");
@@ -65,7 +101,6 @@ async function discoverLatestDelegation() {
     return null;
   }
 }
-
 async function payForSignal() {
   console.log("🤖 NOVA requesting signal from AVA...");
 
