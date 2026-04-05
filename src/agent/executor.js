@@ -233,7 +233,7 @@ async function executeSwap(decision) {
     console.log("⏸️  AVA decided to HOLD");
     return null;
   }
-  if (decision.confidence < 0.65) {
+  if (decision.confidence < 0.50) {
     console.log(`⚠️  Confidence too low (${decision.confidence})`);
     return null;
   }
