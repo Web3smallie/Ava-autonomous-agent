@@ -39,7 +39,7 @@ async function discoverLatestDelegation() {
   try {
     console.log("🔍 NOVA scanning blockchain for active delegation...");
     const currentBlock = await provider.getBlockNumber();
-    const scanDepth = 10000;
+    const scanDepth = 15000;
     const chunkSize = 100;
 
     for (let i = scanDepth; i >= 0; i -= chunkSize) {
