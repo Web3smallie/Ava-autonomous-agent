@@ -138,7 +138,7 @@ app.get("/", (req, res) => {
     name: "AVA - Autonomous Value Agent",
     description: "The first autonomous trading agent on X Layer with open agent network, XAuth delegation and AVA-NOVA Symbiosis SHGR",
     wallet: AVA_WALLET,
-    free: ["/", "/health", "/api/status", "/api/reputation", "/api/logs", "/api/network/agents", "/api/network/discover", "/api/xauth/delegations", "/api/gas-status"],
+    free: ["/", "/health", "/api/status", "/api/reputation", "/api/logs", "/api/network/agents", "/api/network/discover", "/api/xauth/delegations", "/api/gas-status", "/api/shadow/stats", "/api/shadow/intents", "/api/shadow/intent/:id"],
     paid: ["/api/signal", "/api/analysis", "/api/report", "/api/network/buy"],
     xauth: "/api/xauth/delegations",
     network: "/api/network/agents",
@@ -597,6 +597,103 @@ app.get("/api/network/agent/:address", async (req, res) => {
       isActive: data[6],
       totalInteractions: Number(data[7]),
       reputationScore: Number(data[8])
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// SHADOWLEDGER ENDPOINTS
+// ============================================
+
+const SHADOWLEDGER_CONTRACT = "0xc7Dbf29bd9ADEfDD98344db756e35ECE8758C6C1";
+const SHADOWLEDGER_ABI = [
+  "function totalIntents() external view returns (uint256)",
+  "function getAgentIntents(address agent) external view returns (uint256[] memory)",
+  "function intents(uint256) external view returns (address agent, bytes32 reasoningHash, string ipfsMetadata, string action, uint256 rsi, int256 macd, uint256 ethPrice, uint256 timestamp, uint256 accessPrice, bool outcomeRecorded, bool wasSuccessful)"
+];
+
+// GET total intents
+app.get("/api/shadow/stats", async (req, res) => {
+  try {
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+    const sl = new ethers.Contract(SHADOWLEDGER_CONTRACT, SHADOWLEDGER_ABI, provider);
+    const total = await sl.totalIntents();
+    const agentIntents = await sl.getAgentIntents(AVA_WALLET);
+    res.json({
+      contract: SHADOWLEDGER_CONTRACT,
+      totalIntents: total.toString(),
+      avaIntents: agentIntents.length,
+      description: "ShadowLedger — AVA's onchain proof of intent before every trade",
+      explorer: `https://www.okx.com/web3/explorer/xlayer/address/${SHADOWLEDGER_CONTRACT}`,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET specific intent by ID — fully readable
+app.get("/api/shadow/intent/:id", async (req, res) => {
+  try {
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+    const sl = new ethers.Contract(SHADOWLEDGER_CONTRACT, SHADOWLEDGER_ABI, provider);
+    const id = parseInt(req.params.id);
+    const intent = await sl.intents(id);
+
+    res.json({
+      intentId: id,
+      agent: intent.agent,
+      action: intent.action,
+      reasoning: intent.ipfsMetadata,
+      rsi: (Number(intent.rsi) / 100).toFixed(2),
+      macd: (Number(intent.macd) / 100).toFixed(4),
+      ethPrice: "$" + (Number(intent.ethPrice) / 100).toFixed(2),
+      recordedAt: new Date(Number(intent.timestamp) * 1000).toISOString(),
+      accessPrice: ethers.formatUnits(intent.accessPrice, 6) + " USDT",
+      outcomeRecorded: intent.outcomeRecorded,
+      wasSuccessful: intent.wasSuccessful,
+      reasoningHash: intent.reasoningHash,
+      explorer: `https://www.okx.com/web3/explorer/xlayer/address/${SHADOWLEDGER_CONTRACT}`,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET all AVA intents
+app.get("/api/shadow/intents", async (req, res) => {
+  try {
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+    const sl = new ethers.Contract(SHADOWLEDGER_CONTRACT, SHADOWLEDGER_ABI, provider);
+    const intentIds = await sl.getAgentIntents(AVA_WALLET);
+
+    const intents = [];
+    for (const id of intentIds.slice(-10)) {
+      try {
+        const intent = await sl.intents(id);
+        intents.push({
+          intentId: Number(id),
+          action: intent.action,
+          reasoning: intent.ipfsMetadata,
+          rsi: (Number(intent.rsi) / 100).toFixed(2),
+          macd: (Number(intent.macd) / 100).toFixed(4),
+          ethPrice: "$" + (Number(intent.ethPrice) / 100).toFixed(2),
+          recordedAt: new Date(Number(intent.timestamp) * 1000).toISOString(),
+          wasSuccessful: intent.wasSuccessful,
+          outcomeRecorded: intent.outcomeRecorded
+        });
+      } catch (e) {}
+    }
+
+    res.json({
+      agent: AVA_WALLET,
+      totalIntents: intentIds.length,
+      recentIntents: intents,
+      contract: SHADOWLEDGER_CONTRACT,
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
