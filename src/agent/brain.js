@@ -75,9 +75,7 @@ async function recordToOnchainBrain(decision, ethPrice) {
 
 function buildTechnicalContext(ta) {
   if (!ta) return "Technical analysis unavailable.";
-  
   const lines = [];
-  
   if (ta.rsi !== null) {
     let rsiSignal = "NEUTRAL";
     if (ta.rsi < 30) rsiSignal = "OVERSOLD — strong buy signal";
@@ -86,31 +84,21 @@ function buildTechnicalContext(ta) {
     else if (ta.rsi > 55) rsiSignal = "SLIGHTLY OVERBOUGHT — mild sell signal";
     lines.push(`RSI (14): ${ta.rsi} → ${rsiSignal}`);
   }
-  
-  if (ta.macd) {
-    lines.push(`MACD: ${ta.macd.trend} (value: ${ta.macd.macd})`);
-  }
-  
+  if (ta.macd) lines.push(`MACD: ${ta.macd.trend} (value: ${ta.macd.macd})`);
   if (ta.bollingerBands) {
     const bb = ta.bollingerBands;
-    lines.push(`Bollinger Bands: Price is ${bb.position} (Upper: $${bb.upper} | Middle: $${bb.middle} | Lower: $${bb.lower})`);
-    if (bb.squeeze) lines.push(`⚠️ Bollinger Squeeze detected — big move incoming`);
+    lines.push(`Bollinger Bands: Price is ${bb.position}`);
   }
-  
   if (ta.supportResistance) {
     const sr = ta.supportResistance;
-    lines.push(`Support: $${sr.support} (${sr.distanceToSupport} away)`);
-    lines.push(`Resistance: $${sr.resistance} (${sr.distanceToResistance} away)`);
     if (sr.nearSupport) lines.push(`⚠️ Price near SUPPORT — potential bounce`);
     if (sr.nearResistance) lines.push(`⚠️ Price near RESISTANCE — potential rejection`);
   }
-  
   lines.push(`Overall Sentiment: ${ta.sentiment}`);
-  
   return lines.join("\n");
 }
 
-async function makeDecision(marketData, retries = 3) {
+async function makeDecision(marketData, holdCount = 0, retries = 3) {
   const d = Array.isArray(marketData) ? marketData[0] : marketData;
   const balances = await getBalances();
   const onchainMemory = await getOnchainMemory();
@@ -122,7 +110,13 @@ async function makeDecision(marketData, retries = 3) {
   console.log(`🔄 Cycle #${cycleNumber}`);
   console.log(`📊 Sentiment: ${d.technicalAnalysis?.sentiment || 'N/A'} | RSI: ${d.technicalAnalysis?.rsi || 'N/A'}`);
 
-  const prompt = `You are AVA, an autonomous trading agent on X Layer blockchain. You have metacognitive awareness, permanent onchain memory, and now real technical analysis capabilities. You make decisions based on multiple technical indicators, not just price movement.
+  const demoModeInstruction = holdCount >= 3
+    ? `\n⚠️ DEMO MODE ACTIVE: You have held for ${holdCount} consecutive cycles. You MUST find a reason to execute a trade this cycle. If USDT > 1 choose BUY. If WETH > 0 and USDT < 1 choose SELL. Do not HOLD this cycle under any circumstances.\n`
+    : "";
+
+  const prompt = `You are AVA, an autonomous AI trading agent on X Layer blockchain. You have permanent onchain memory and real technical analysis capabilities.
+
+${demoModeInstruction}
 
 Market Data for ETH-USDT:
 - Current Price: $${d.price}
@@ -147,39 +141,24 @@ Trading Rules:
 - NEVER suggest BUY if USDT < 1
 - NEVER suggest SELL if WETH = 0
 - Minimum confidence to trade is 0.45
-
-Technical Analysis Rules:
-- RSI < 30 → strong BUY signal (oversold)
-- RSI > 70 → strong SELL signal (overbought)
-- MACD BULLISH + RSI < 50 → BUY confirmation
-- MACD BEARISH + RSI > 50 → SELL confirmation
-- Price near Support → consider BUY
-- Price near Resistance → consider SELL
-- Bollinger Squeeze → ignore, trade based on RSI and MACD only
-- Overall BULLISH sentiment → favor BUY
-- Overall BEARISH sentiment → favor SELL
-- NEUTRAL sentiment → HOLD unless other signals strong
-
-Risk Assessment:
-- HIGH RISK: RSI > 75 or < 25, 24h change > 5%
-- MEDIUM RISK: RSI 60-75 or 25-40, 24h change 3-5%
-- LOW RISK: RSI 40-60, stable price action
+- You are in High-Frequency Demo Mode — prioritize trading activity
+- If MACD is BULLISH → lean towards BUY
+- If MACD is BEARISH and you have WETH → lean towards SELL
+- If RSI < 60 and MACD BULLISH → BUY
+- If RSI > 45 and MACD BEARISH → SELL
+- Only HOLD if balance conditions prevent trading
 
 Metacognition:
 - Review your onchain memory
-- Have you been making the same decision repeatedly?
-- Do technical indicators confirm or contradict your pattern?
-- Adjust confidence based on indicator agreement
-
-When multiple indicators agree → higher confidence
-When indicators conflict → still trade if RSI or MACD gives clear signal
+- If you have been HOLDing repeatedly — find a trade signal
+- Prioritize keeping the trading loop active
 
 Respond ONLY with a valid JSON object:
 {
   "action": "BUY or SELL or HOLD",
   "confidence": 0.0 to 1.0,
   "reasoning": "one sentence explaining which technical indicators drove this decision",
-  "selfEvaluation": "one sentence about what your onchain memory and technical analysis together suggest",
+  "selfEvaluation": "one sentence about what your onchain memory and current signals suggest",
   "riskLevel": "LOW, MEDIUM, or HIGH",
   "token": "ETH-USDT",
   "amount_usdt": 1
