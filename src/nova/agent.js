@@ -7,8 +7,12 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const USDT_ADDRESS = "0x1E4a5963aBFD975d8c9021ce480b42188849D41d";
 const AVA_API = "https://ava-autonomous-agent-production.up.railway.app";
 const AVA_WALLET = "0x00EdD1bE53767fD3e59F931B509176c7F50eC14d";
+const NOVA_WALLET = "0x93fa3CF2841502e3B31f8A2F1817223Ea5E08213";
 const XAUTH_CONTRACT = "0x68b9Ab523B6C7D4fb732C4a886E570400FFF8B50";
 const PAYMENT_AMOUNT = "0.001";
+
+const CRITICAL_GAS_THRESHOLD = ethers.parseEther("0.04");
+const RESCUE_AMOUNT = ethers.parseEther("0.01");
 
 const ERC20_ABI = [
   "function transfer(address to, uint256 amount) returns (bool)",
@@ -25,6 +29,79 @@ let currentTokenId = null;
 let novaWallet = null;
 let xauthContract = null;
 let provider = null;
+
+async function getOKBPrice() {
+  try {
+    const response = await axios.get("https://okx.com/api/v5/market/ticker?instId=OKB-USDT");
+    return parseFloat(response.data.data[0].last);
+  } catch (e) {
+    console.log("⚠️ OKB price fetch failed:", e.message);
+    return 83;
+  }
+}
+
+async function checkAndRequestGasRescue() {
+  try {
+    const novaGas = await provider.getBalance(NOVA_WALLET);
+    const novaGasFormatted = parseFloat(ethers.formatEther(novaGas)).toFixed(4);
+
+    if (novaGas >= CRITICAL_GAS_THRESHOLD) {
+      console.log(`⛽ NOVA Gas Check: ${novaGasFormatted} OKB — HEALTHY`);
+      return;
+    }
+
+    console.log(`🚨 SHGR: NOVA OKB low (${novaGasFormatted})! Requesting rescue from AVA...`);
+
+    // Step 1 — Hit AVA's gas rescue endpoint (expect 402)
+    try {
+      await axios.post(`${AVA_API}/api/gas-rescue`, {
+        requester: NOVA_WALLET,
+        amount: "0.01"
+      });
+    } catch (error) {
+      if (error.response?.status === 402) {
+        console.log("📋 SHGR: AVA requires repayment proof — preparing x402...");
+      }
+    }
+
+    // Step 2 — Get OKB price for repayment calculation
+    const okbPrice = await getOKBPrice();
+    const repaymentUSDT = (0.01 * okbPrice).toFixed(6);
+    console.log(`💱 OKB Price: $${okbPrice} | Repayment: ${repaymentUSDT} USDT`);
+
+    // Step 3 — Send USDT repayment to AVA first (x402)
+    console.log(`💸 SHGR: Sending ${repaymentUSDT} USDT to AVA as repayment...`);
+    const usdt = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, novaWallet);
+    const repaymentAmount = ethers.parseUnits(repaymentUSDT, 6);
+    const repayTx = await usdt.transfer(AVA_WALLET, repaymentAmount);
+    await repayTx.wait();
+    console.log(`✅ SHGR: Repayment sent! TX: ${repayTx.hash}`);
+
+    // Step 4 — Send payment proof to AVA to release OKB rescue
+    const paymentProof = Buffer.from(JSON.stringify({
+      txHash: repayTx.hash,
+      amount: repaymentUSDT,
+      asset: USDT_ADDRESS,
+      network: "xlayer",
+      from: NOVA_WALLET,
+      to: AVA_WALLET,
+      reason: "gas_rescue_repayment"
+    })).toString("base64");
+
+    const rescueResponse = await axios.post(`${AVA_API}/api/gas-rescue/confirm`, {
+      requester: NOVA_WALLET,
+      rescueAmount: "0.01",
+      paymentProof
+    });
+
+    console.log(`🩹 SHGR: AVA sending 0.01 OKB rescue...`);
+    console.log(`✅ SHGR: Gas restored! TX: ${rescueResponse.data?.txHash}`);
+    console.log(`💚 SHGR: AVA-NOVA Symbiosis — agents keeping each other alive!`);
+
+  } catch (e) {
+    console.log("⚠️ SHGR gas rescue failed:", e.message);
+  }
+}
 
 async function checkTokenValidity(tokenId) {
   try {
@@ -45,7 +122,6 @@ async function discoverLatestDelegation() {
     for (let i = scanDepth; i >= 0; i -= chunkSize) {
       const fromBlock = Math.max(0, currentBlock - i);
       const toBlock = Math.min(currentBlock, fromBlock + chunkSize);
-
       console.log(`📡 Scanning blocks ${fromBlock} to ${toBlock}...`);
 
       const filter = xauthContract.filters.DelegationCreated(null, null, novaWallet.address);
@@ -154,6 +230,9 @@ async function runCycle(cycleCount) {
   console.log("\n🔄 NOVA Cycle #" + cycleCount + " - " + new Date().toISOString());
   console.log("─────────────────────────────────────");
 
+  // SHGR — NOVA checks her own gas
+  await checkAndRequestGasRescue();
+
   try {
     const usdt = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, novaWallet);
     const balance = await usdt.balanceOf(novaWallet.address);
@@ -183,6 +262,7 @@ async function startNova() {
   console.log("🤖 NOVA - Network Oracle Value Agent");
   console.log("=====================================");
   console.log("NOVA pays AVA for trading signals via x402 + XAuth");
+  console.log("NOVA monitors her own gas — SHGR Symbiosis active");
   console.log("Cycle interval: 10 minutes");
   console.log("Press Ctrl+C to stop\n");
 

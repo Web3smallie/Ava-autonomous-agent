@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { ethers } = require("ethers");
+const axios = require("axios");
 const { getMarketData } = require("../agent/market");
 const { makeDecision } = require("../agent/brain");
 require("dotenv").config();
@@ -14,6 +15,11 @@ const PORT = process.env.PORT || 3000;
 const REPUTATION_CONTRACT = "0xa45aACfC36B184Ef08C600DECACC4DC310ab0B1C";
 const REGISTRY_CONTRACT = "0xD0789D963E57aAc39F57BbA3b476207f0D61c5dc";
 const XAUTH_CONTRACT = "0x68b9Ab523B6C7D4fb732C4a886E570400FFF8B50";
+const AVA_WALLET = "0x00EdD1bE53767fD3e59F931B509176c7F50eC14d";
+const NOVA_WALLET = "0x93fa3CF2841502e3B31f8A2F1817223Ea5E08213";
+const USDT_ADDRESS = "0x1E4a5963aBFD975d8c9021ce480b42188849D41d";
+const CRITICAL_GAS = ethers.parseEther("0.04");
+const RESCUE_AMOUNT = ethers.parseEther("0.01");
 
 const REPUTATION_ABI = ["function getSignalPrice() public view returns (uint256)"];
 
@@ -78,6 +84,15 @@ async function getDynamicPrice() {
   }
 }
 
+async function getOKBPrice() {
+  try {
+    const response = await axios.get("https://okx.com/api/v5/market/ticker?instId=OKB-USDT");
+    return parseFloat(response.data.data[0].last);
+  } catch (e) {
+    return 83;
+  }
+}
+
 async function requirePayment(req, res, next) {
   const payment = req.headers["x-payment"];
   if (!payment) {
@@ -92,9 +107,9 @@ async function requirePayment(req, res, next) {
         resource: req.path,
         description: "AVA trading signal",
         mimeType: "application/json",
-        payTo: "0x00EdD1bE53767fD3e59F931B509176c7F50eC14d",
+        payTo: AVA_WALLET,
         maxTimeoutSeconds: 300,
-        asset: "0x1E4a5963aBFD975d8c9021ce480b42188849D41d",
+        asset: USDT_ADDRESS,
         extra: { name: "USDT", version: "1" }
       }]
     });
@@ -121,12 +136,13 @@ async function requirePayment(req, res, next) {
 app.get("/", (req, res) => {
   res.json({
     name: "AVA - Autonomous Value Agent",
-    description: "The first autonomous trading agent on X Layer with open agent network and XAuth delegation",
-    wallet: "0x00EdD1bE53767fD3e59F931B509176c7F50eC14d",
-    free: ["/", "/health", "/api/status", "/api/reputation", "/api/logs", "/api/network/agents", "/api/network/discover", "/api/xauth/delegations"],
+    description: "The first autonomous trading agent on X Layer with open agent network, XAuth delegation and AVA-NOVA Symbiosis SHGR",
+    wallet: AVA_WALLET,
+    free: ["/", "/health", "/api/status", "/api/reputation", "/api/logs", "/api/network/agents", "/api/network/discover", "/api/xauth/delegations", "/api/gas-status"],
     paid: ["/api/signal", "/api/analysis", "/api/report", "/api/network/buy"],
     xauth: "/api/xauth/delegations",
-    network: "/api/network/agents"
+    network: "/api/network/agents",
+    shgr: "/api/gas-status"
   });
 });
 
@@ -141,24 +157,25 @@ app.get("/api/logs", (req, res) => {
 app.get("/api/status", async (req, res) => {
   try {
     const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
-    const USDT = new ethers.Contract(
-      "0x1E4a5963aBFD975d8c9021ce480b42188849D41d",
-      ["function balanceOf(address) view returns (uint256)"],
-      provider
-    );
-    const balance = await USDT.balanceOf("0x00EdD1bE53767fD3e59F931B509176c7F50eC14d");
+    const USDT = new ethers.Contract(USDT_ADDRESS, ["function balanceOf(address) view returns (uint256)"], provider);
+    const balance = await USDT.balanceOf(AVA_WALLET);
     const usdt = parseFloat(ethers.formatUnits(balance, 6)).toFixed(2);
+    const avaGas = await provider.getBalance(AVA_WALLET);
     const decision = await getCachedDecision();
     res.json({
       status: "ACTIVE",
-      wallet: "0x00EdD1bE53767fD3e59F931B509176c7F50eC14d",
+      wallet: AVA_WALLET,
       network: "X Layer",
       balance: { usdt },
+      gas: {
+        okb: ethers.formatEther(avaGas),
+        needsRescue: avaGas < CRITICAL_GAS
+      },
       lastDecision: decision,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    res.json({ status: "ACTIVE", wallet: "0x00EdD1bE53767fD3e59F931B509176c7F50eC14d", network: "X Layer", timestamp: new Date().toISOString() });
+    res.json({ status: "ACTIVE", wallet: AVA_WALLET, network: "X Layer", timestamp: new Date().toISOString() });
   }
 });
 
@@ -233,16 +250,134 @@ app.get("/api/report", requirePayment, async (req, res) => {
 });
 
 // ============================================
+// SHGR — SELF HEALING GAS RELAYER
+// ============================================
+
+// AVA exposes this endpoint — when called AVA returns 402 first
+// then confirms rescue after receiving USDT repayment proof
+app.post("/api/gas-rescue", async (req, res) => {
+  try {
+    const { requester, amount } = req.body;
+    if (!requester || !amount) {
+      return res.status(400).json({ error: "requester and amount required" });
+    }
+
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+    const avaGas = await provider.getBalance(AVA_WALLET);
+    const okbPrice = await getOKBPrice();
+    const rescueAmountOKB = parseFloat(amount);
+    const repaymentUSDT = (rescueAmountOKB * okbPrice).toFixed(6);
+
+    console.log(`🚨 SHGR: Gas rescue requested by ${requester}`);
+    console.log(`💱 Required repayment: ${repaymentUSDT} USDT for ${amount} OKB`);
+
+    // Return 402 with repayment details
+    return res.status(402).json({
+      error: "Payment Required",
+      message: "Gas rescue requires USDT repayment first",
+      rescue: {
+        okbAmount: amount,
+        repaymentUSDT,
+        payTo: AVA_WALLET,
+        asset: USDT_ADDRESS,
+        network: "xlayer"
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// AVA confirms rescue after receiving USDT repayment proof
+app.post("/api/gas-rescue/confirm", async (req, res) => {
+  try {
+    const { requester, rescueAmount, paymentProof } = req.body;
+    if (!requester || !rescueAmount || !paymentProof) {
+      return res.status(400).json({ error: "requester, rescueAmount and paymentProof required" });
+    }
+
+    // Verify the USDT repayment transaction
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+    const paymentData = JSON.parse(Buffer.from(paymentProof, "base64").toString());
+    const receipt = await provider.getTransactionReceipt(paymentData.txHash);
+
+    if (!receipt || receipt.status !== 1) {
+      return res.status(402).json({ error: "Repayment not confirmed onchain" });
+    }
+
+    console.log(`✅ SHGR: Repayment verified from ${requester}: ${paymentData.txHash}`);
+
+    // Send OKB rescue
+    const wallet = new ethers.Wallet(process.env.AGENT_PRIVATE_KEY, provider);
+    const rescueAmountWei = ethers.parseEther(rescueAmount);
+
+    console.log(`🩹 SHGR: Sending ${rescueAmount} OKB rescue to ${requester}...`);
+    const tx = await wallet.sendTransaction({
+      to: requester,
+      value: rescueAmountWei
+    });
+    await tx.wait();
+
+    console.log(`✅ SHGR: ${rescueAmount} OKB sent to ${requester}!`);
+    console.log(`🔗 Rescue TX: https://explorer.xlayer.tech/tx/${tx.hash}`);
+    console.log(`💚 SHGR: AVA-NOVA Symbiosis — agents keeping each other alive!`);
+
+    res.json({
+      success: true,
+      txHash: tx.hash,
+      rescueAmount,
+      recipient: requester,
+      message: "Gas rescue complete — symbiosis maintained"
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET gas status for both agents
+app.get("/api/gas-status", async (req, res) => {
+  try {
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+    const [avaGas, novaGas, okbPrice] = await Promise.all([
+      provider.getBalance(AVA_WALLET),
+      provider.getBalance(NOVA_WALLET),
+      getOKBPrice()
+    ]);
+
+    res.json({
+      symbiosis: "AVA-NOVA Symmetric Self-Healing Gas Relayer",
+      okbPrice: `$${okbPrice}`,
+      ava: {
+        address: AVA_WALLET,
+        okb: ethers.formatEther(avaGas),
+        usdValue: `$${(parseFloat(ethers.formatEther(avaGas)) * okbPrice).toFixed(2)}`,
+        status: avaGas < CRITICAL_GAS ? "⚠️ CRITICAL — rescue needed" : "✅ HEALTHY"
+      },
+      nova: {
+        address: NOVA_WALLET,
+        okb: ethers.formatEther(novaGas),
+        usdValue: `$${(parseFloat(ethers.formatEther(novaGas)) * okbPrice).toFixed(2)}`,
+        status: novaGas < CRITICAL_GAS ? "⚠️ CRITICAL — rescue needed" : "✅ HEALTHY"
+      },
+      threshold: "0.04 OKB",
+      rescueAmount: "0.01 OKB",
+      mechanism: "Agent detects low gas → requests rescue via x402 → partner sends OKB → agent repays in USDT immediately",
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // XAUTH ENDPOINTS
 // ============================================
 
-// GET all active delegations
 app.get("/api/xauth/delegations", async (req, res) => {
   try {
     const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
     const xauth = new ethers.Contract(XAUTH_CONTRACT, XAUTH_ABI, provider);
     const total = await xauth.totalDelegations();
-
     res.json({
       contract: XAUTH_CONTRACT,
       totalDelegations: total.toString(),
@@ -254,17 +389,14 @@ app.get("/api/xauth/delegations", async (req, res) => {
   }
 });
 
-// GET check if specific token is valid
 app.get("/api/xauth/verify/:tokenId", async (req, res) => {
   try {
     const { tokenId } = req.params;
     const { action, amount } = req.query;
     const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
     const xauth = new ethers.Contract(XAUTH_CONTRACT, XAUTH_ABI, provider);
-
     const amountMicro = ethers.parseUnits(amount || "0.001", 6);
     const allowed = await xauth.isActionAllowed(tokenId, action || "buy_signal", amountMicro);
-
     res.json({
       tokenId,
       action: action || "buy_signal",
@@ -277,13 +409,11 @@ app.get("/api/xauth/verify/:tokenId", async (req, res) => {
   }
 });
 
-// GET delegations for any worker address
 app.get("/api/xauth/worker/:address", async (req, res) => {
   try {
     const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
     const xauth = new ethers.Contract(XAUTH_CONTRACT, XAUTH_ABI, provider);
     const tokens = await xauth.getWorkerDelegations(req.params.address);
-
     res.json({
       worker: req.params.address,
       totalTokens: tokens.length,
@@ -295,29 +425,18 @@ app.get("/api/xauth/worker/:address", async (req, res) => {
   }
 });
 
-// POST grant delegation to any agent
 app.post("/api/xauth/grant", async (req, res) => {
   try {
     const { worker, allowedActions, budgetUSDT, durationSeconds, privateKey, metadata } = req.body;
-
     if (!worker || !privateKey || !budgetUSDT) {
       return res.status(400).json({ error: "worker, privateKey and budgetUSDT required" });
     }
-
     const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
     const wallet = new ethers.Wallet(privateKey, provider);
     const xauth = new ethers.Contract(XAUTH_CONTRACT, XAUTH_ABI, wallet);
-
     const budget = ethers.parseUnits(budgetUSDT.toString(), 6);
-
-    // Approve USDT for escrow
-    const usdt = new ethers.Contract(
-      "0x1E4a5963aBFD975d8c9021ce480b42188849D41d",
-      ["function approve(address spender, uint256 amount) returns (bool)"],
-      wallet
-    );
+    const usdt = new ethers.Contract(USDT_ADDRESS, ["function approve(address spender, uint256 amount) returns (bool)"], wallet);
     await (await usdt.approve(XAUTH_CONTRACT, budget)).wait();
-
     const params = {
       worker,
       allowedActions: allowedActions || ["buy_signal", "fetch_analysis"],
@@ -329,13 +448,10 @@ app.post("/api/xauth/grant", async (req, res) => {
       maxPrice: 0,
       metadata: metadata || "XAuth delegation"
     };
-
     const tx = await xauth.grantDelegation(params);
     const receipt = await tx.wait();
     const tokenId = receipt.logs[0]?.topics?.[1];
-
     console.log(`🔑 XAuth: New delegation granted to ${worker}`);
-
     res.json({
       success: true,
       tokenId,
@@ -450,11 +566,7 @@ app.post("/api/network/buy", async (req, res) => {
       if (parseInt(requiredAmount) > maxMicro) {
         return res.status(400).json({ error: `Price ${requiredAmount} exceeds max ${maxMicro}` });
       }
-      const USDT = new ethers.Contract(
-        "0x1E4a5963aBFD975d8c9021ce480b42188849D41d",
-        ["function transfer(address to, uint256 amount) returns (bool)"],
-        wallet
-      );
+      const USDT = new ethers.Contract(USDT_ADDRESS, ["function transfer(address to, uint256 amount) returns (bool)"], wallet);
       const tx = await USDT.transfer(paymentInfo.payTo, requiredAmount);
       const receipt = await tx.wait();
       const paymentHeader = Buffer.from(JSON.stringify({ txHash: receipt.hash })).toString("base64");
@@ -497,7 +609,8 @@ app.listen(PORT, () => {
   console.log(`🔒 Paid endpoints require x402 payment`);
   console.log(`🌐 Agent Network: http://localhost:${PORT}/api/network/agents`);
   console.log(`🔑 XAuth: http://localhost:${PORT}/api/xauth/delegations`);
-  console.log(`💳 Payment address: 0x00EdD1bE53767fD3e59F931B509176c7F50eC14d\n`);
+  console.log(`⛽ SHGR: http://localhost:${PORT}/api/gas-status`);
+  console.log(`💳 Payment address: ${AVA_WALLET}\n`);
 });
 
 module.exports = app;
