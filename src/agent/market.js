@@ -16,7 +16,9 @@ async function updateOraclePrice(symbol, price) {
     const wallet = new ethers.Wallet(process.env.AGENT_PRIVATE_KEY, provider);
     const oracle = new ethers.Contract(PRICE_ORACLE_CONTRACT, PRICE_ORACLE_ABI, wallet);
     const priceInt = Math.round(price * 100);
-    const tx = await oracle.updatePrice(symbol, priceInt);
+    const tx = await oracle.updatePrice(symbol, priceInt, {
+  gasPrice: ethers.parseUnits("0.1", "gwei")
+});
     await tx.wait();
     console.log(`🔮 Oracle updated: ${symbol} = $${price}`);
   } catch (e) {
@@ -201,9 +203,11 @@ async function getMarketData(symbol = "ETH-USDT") {
     console.log(`   Sentiment: ${sentiment}`);
 
     // Update PriceOracle onchain — AVA IS the oracle
-    updateOraclePrice("ETH-USDT", lastPrice).catch(e =>
-      console.log("⚠️ Oracle update failed:", e.message)
-    );
+    setTimeout(() => {
+  updateOraclePrice("ETH-USDT", lastPrice).catch(e =>
+    console.log("⚠️ Oracle update failed:", e.message)
+  );
+}, 15000);
 
     return {
       symbol,
