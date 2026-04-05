@@ -48,7 +48,7 @@ console.log = (...args) => {
 // Cache
 let cachedDecision = null;
 let lastDecisionTime = 0;
-const DECISION_CACHE_MS = 60 * 60 * 1000;
+const DECISION_CACHE_MS = 15 * 60 * 1000;
 
 app.updateState = (decision, trade) => {};
 
