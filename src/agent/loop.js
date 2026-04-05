@@ -19,17 +19,14 @@ const ERC20_ABI = [
 async function getWalletBalances() {
   const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
   const wallet = new ethers.Wallet(process.env.AGENT_PRIVATE_KEY, provider);
-
   const usdt = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, provider);
   const weth = new ethers.Contract(WETH_ADDRESS, ERC20_ABI, provider);
   const wokb = new ethers.Contract(WOKB_ADDRESS, ERC20_ABI, provider);
-
   const [usdtBal, wethBal, wokbBal] = await Promise.all([
     usdt.balanceOf(wallet.address),
     weth.balanceOf(wallet.address),
     wokb.balanceOf(wallet.address)
   ]);
-
   return {
     usdt: parseFloat(ethers.formatUnits(usdtBal, 6)),
     weth: parseFloat(ethers.formatEther(wethBal)),
@@ -44,11 +41,9 @@ async function runCycle() {
   console.log("─────────────────────────────────────");
 
   try {
-    // Check wallet balances first
     const balances = await getWalletBalances();
     console.log(`💰 Balances: ${balances.usdt} USDT | ${balances.weth.toFixed(6)} WETH | ${balances.wokb.toFixed(4)} WOKB`);
 
-    // If low on USDT but have WETH — sell WETH first
     if (balances.usdt < 2 && balances.weth > 0.0001) {
       console.log("⚠️  Low USDT — selling WETH back to USDT...");
       const sellDecision = {
@@ -56,13 +51,12 @@ async function runCycle() {
         confidence: 0.8,
         reasoning: "Low USDT balance — converting WETH back to USDT",
         token: "ETH-USDT",
-        amount_usdt: parseFloat((balances.weth * 2100 * 0.5).toFixed(2))
+        amount_usdt: 1
       };
-      await executeSwap(sellDecision);
+      await executeSwap(sellDecision, null);
       return;
     }
 
-    // If low on USDT but have WOKB — sell WOKB first
     if (balances.usdt < 2 && balances.wokb > 0.01) {
       console.log("⚠️  Low USDT — selling WOKB back to USDT...");
       const sellDecision = {
@@ -70,36 +64,21 @@ async function runCycle() {
         confidence: 0.8,
         reasoning: "Low USDT balance — converting WOKB back to USDT",
         token: "OKB-USDT",
-        amount_usdt: balances.wokb * 85 * 0.5 // sell 50% of WOKB
+        amount_usdt: balances.wokb * 85 * 0.5
       };
-      await executeSwap(sellDecision);
+      await executeSwap(sellDecision, null);
       return;
     }
 
-    if (balances.usdt < 2 && balances.weth > 0.0001) {
-  console.log("⚠️  Low USDT — selling WETH back to USDT...");
-  const sellDecision = {
-    action: "SELL",
-    confidence: 0.8,
-    reasoning: "Low USDT balance — converting WETH back to USDT",
-    token: "ETH-USDT",
-    amount_usdt: 1
-  };
-  await executeSwap(sellDecision);
-  return;
-}
-
-    // Normal cycle — fetch market data and decide
     console.log("👀 Fetching market data...");
     const marketData = await getMarketData("ETH-USDT");
 
     console.log("🧠 Thinking...");
     const decision = await makeDecision(marketData);
 
-    // Execute if confident enough
-    if (decision.confidence >= 0.65 && decision.action !== "HOLD") {
+    if (decision.confidence >= 0.50 && decision.action !== "HOLD") {
       console.log(`⚡ Executing ${decision.action} with ${decision.confidence * 100}% confidence`);
-      const txHash = await executeSwap(decision);
+      const txHash = await executeSwap(decision, marketData);
       if (txHash) {
         console.log(`✅ Trade complete! TX: ${txHash}`);
       }
@@ -120,13 +99,10 @@ async function startAgent() {
   console.log("Press Ctrl+C to stop\n");
 
   isRunning = true;
-
   await runCycle();
 
   const interval = setInterval(async () => {
-    if (isRunning) {
-      await runCycle();
-    }
+    if (isRunning) await runCycle();
   }, 5 * 60 * 1000);
 
   process.on("SIGINT", () => {
