@@ -41,6 +41,9 @@ async function runCycle() {
   console.log("─────────────────────────────────────");
 
   try {
+    const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+    const wallet = new ethers.Wallet(process.env.AGENT_PRIVATE_KEY, provider);
+    await ensureNOVADelegation(wallet, provider);
     const balances = await getWalletBalances();
     console.log(`💰 Balances: ${balances.usdt} USDT | ${balances.weth.toFixed(6)} WETH | ${balances.wokb.toFixed(4)} WOKB`);
 
