@@ -251,7 +251,7 @@ app.get("/", (req, res) => {
     description: "The first autonomous trading agent on X Layer with open agent network, XAuth delegation, AVA-NOVA Symbiosis SHGR and TEE Agentic Wallet Treasury",
     wallet: AVA_WALLET,
     agenticWallet: AGENTIC_WALLET,
-    free: ["/", "/health", "/api/status", "/api/reputation", "/api/logs", "/api/network/agents", "/api/network/discover", "/api/xauth/delegations", "/api/gas-status", "/api/shadow/stats", "/api/shadow/intents", "/api/shadow/intent/:id", "/api/treasury"],
+    free: ["/", "/health", "/api/status", "/api/reputation", "/api/logs", "/api/network/agents", "/api/network/discover", "/api/xauth/delegations", "/api/gas-status", "/api/shadow/stats", "/api/shadow/intents", "/api/shadow/intent/:id", "/api/treasury", "/api/circuit-breaker/status"],
     paid: ["/api/signal", "/api/analysis", "/api/report", "/api/network/buy"],
     xauth: "/api/xauth/delegations",
     network: "/api/network/agents",
@@ -830,6 +830,42 @@ app.get("/api/network/agent/:address", async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// ============================================
+// TASK 3: CIRCUIT BREAKER — PANIC BUTTON
+// ============================================
+const loop = require("../agent/loop");
+
+app.post("/api/circuit-breaker/activate", (req, res) => {
+  const { durationHours } = req.body;
+  loop.activateCircuitBreaker(durationHours || 24);
+  console.log(`[RISK-OFFICER] 🚨 Circuit Breaker activated via dashboard`);
+  res.json({
+    success: true,
+    message: `Circuit Breaker activated — all transactions frozen for ${durationHours || 24} hours`,
+    authorization: "Action authorized by Human Admin",
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.post("/api/circuit-breaker/deactivate", (req, res) => {
+  loop.deactivateCircuitBreaker();
+  console.log(`[RISK-OFFICER] ✅ Circuit Breaker deactivated via dashboard`);
+  res.json({
+    success: true,
+    message: "Circuit Breaker deactivated — resuming normal operations",
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get("/api/circuit-breaker/status", (req, res) => {
+  const status = loop.getCircuitBreakerStatus();
+  res.json({
+    ...status,
+    message: status.active ? "⚠️ Circuit Breaker ACTIVE — all transactions frozen" : "✅ Circuit Breaker INACTIVE — normal operations",
+    timestamp: new Date().toISOString()
+  });
 });
 
 app.listen(PORT, () => {
